@@ -9,10 +9,19 @@ namespace BlazorServerRenderKinopoisk.Models
         [JsonPropertyName("posterPath")] public string? PosterPath { get; set; }
         [JsonPropertyName("releaseDate")] public DateTime? ReleaseDate { get; set; }
         [JsonPropertyName("voteAverage")] public double VoteAverage { get; set; }
+        [JsonPropertyName("overview")] public string? Overview { get; set; }
+        [JsonPropertyName("runtime")] public int? Runtime { get; set; }
+        [JsonPropertyName("genres")] public List<GenreDto>? Genres { get; set; }
 
         public string PosterUrl => PosterPath is not null
-            ? $"https://image.tmdb.org/t/p/w500{PosterPath}" : "";
+            ? $"http://screeny.ddns.net/api/catalog/poster/w500{PosterPath}" : "";
         public string RatingText => $"{VoteAverage:F1}";
         public string ReleaseYear => ReleaseDate?.Year.ToString() ?? "";
+    }
+
+    public class GenreDto
+    {
+        [JsonPropertyName("id")] public int Id { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
     }
 }

@@ -7,11 +7,32 @@
 
 .movie-card {
     flex: 0 0 150px;
+    display: flex;
+    flex-direction: column;
+}
+
+.movie-card .mud-card-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 .movie-title {
+    flex: 1;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    margin-bottom: 4px;
 }
+
+.search-field .mud-input-outlined-border {
+    border-radius: 999px !important;
+}
+
+.home-active {
+    border: 2px solid #F6C516 !important;
+    border-radius: 999px !important;
+}
+

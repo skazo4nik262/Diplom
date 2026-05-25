@@ -1,0 +1,92 @@
+.tooltip-card {
+    position: fixed;
+    z-index: 1000;
+    width: 420px;
+    height: 320px;
+    border-radius: 12px;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.tooltip-gradient {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 0%, #0d0d0d 100%);
+    display: flex;
+    flex-direction: column;
+    padding: 0 16px 16px;
+}
+
+.tooltip-spacer {
+    flex: 1;
+}
+
+.tooltip-meta {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tooltip-overview {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.tooltip-readmore-btn {
+    background: none;
+    border: none;
+    color: #F6C516;
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.8rem;
+    display: inline;
+}
+
+.tooltip-readmore {
+    position: absolute;
+    inset: 0;
+    background: rgba(13, 13, 13, 0.92);
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+}
+
+.tooltip-backbar {
+    flex-shrink: 0;
+}
+
+.tooltip-back-btn {
+    background: none;
+    border: none;
+    color: #F6C516;
+    cursor: pointer;
+    padding: 4px 0;
+    font-size: 0.9rem;
+}
+
+.tooltip-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    margin: 10px 0;
+    flex-shrink: 0;
+}
+
+.tooltip-fulloverview {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.tooltip-fulloverview::-webkit-scrollbar {
+    display: none;
+}

@@ -5,22 +5,27 @@
 @inject TokenStore TokenStore
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
+@inject IJSRuntime JS
 
 <MudContainer Class="mt-4">
-    <MudText Typo="Typo.h5" Class="mb-2">Popular Movies</MudText>
+    <Hero Movies="popularMovies" />
+
+    <MudText Typo="Typo.h5" Class="mb-2 mt-4">Popular Movies</MudText>
     <div class="carousel">
         @foreach (var movie in popularMovies)
         {
-            <MudCard Class="movie-card" Outlined="false">
-                <MudCardMedia Image="@movie.PosterUrl" Height="225" />
-                <MudCardContent Class="pa-2">
-                    <MudText Typo="Typo.body2" Class="movie-title">@movie.Title</MudText>
-                    <div class="d-flex align-center ga-2">
-                        <MudText Typo="Typo.caption" Color="Color.Primary">@movie.RatingText</MudText>
-                        <MudText Typo="Typo.caption" Style="opacity: 0.5">@movie.ReleaseYear</MudText>
-                    </div>
-                </MudCardContent>
-            </MudCard>
+            <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="ScheduleUnhover" @onmousemove="(e) => TrackMouseMove(e)" style="flex: 0 0 150px">
+                <MudCard Class="movie-card" Outlined="false">
+                    <MudCardMedia Image="@movie.PosterUrl" Height="225" />
+                    <MudCardContent Class="pa-2">
+                        <MudText Typo="Typo.body2" Class="movie-title">@movie.Title</MudText>
+                        <div class="d-flex align-center justify-space-between">
+                            <MudText Typo="Typo.caption" Color="Color.Primary">@movie.RatingText</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.5">@movie.ReleaseYear</MudText>
+                        </div>
+                    </MudCardContent>
+                </MudCard>
+            </div>
         }
     </div>
 
@@ -28,16 +33,18 @@
     <div class="carousel">
         @foreach (var movie in topRatedMovies)
         {
-            <MudCard Class="movie-card" Outlined="false">
-                <MudCardMedia Image="@movie.PosterUrl" Height="225" />
-                <MudCardContent Class="pa-2">
-                    <MudText Typo="Typo.body2" Class="movie-title">@movie.Title</MudText>
-                    <div class="d-flex align-center ga-2">
-                        <MudText Typo="Typo.caption" Color="Color.Primary">@movie.RatingText</MudText>
-                        <MudText Typo="Typo.caption" Style="opacity: 0.5">@movie.ReleaseYear</MudText>
-                    </div>
-                </MudCardContent>
-            </MudCard>
+            <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="ScheduleUnhover" @onmousemove="(e) => TrackMouseMove(e)" style="flex: 0 0 150px">
+                <MudCard Class="movie-card" Outlined="false">
+                    <MudCardMedia Image="@movie.PosterUrl" Height="225" />
+                    <MudCardContent Class="pa-2">
+                        <MudText Typo="Typo.body2" Class="movie-title">@movie.Title</MudText>
+                        <div class="d-flex align-center justify-space-between">
+                            <MudText Typo="Typo.caption" Color="Color.Primary">@movie.RatingText</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.5">@movie.ReleaseYear</MudText>
+                        </div>
+                    </MudCardContent>
+                </MudCard>
+            </div>
         }
     </div>
 
@@ -49,6 +56,11 @@
     }
 </MudContainer>
 
+@if (_hoveredMovie != null)
+{
+    <MovieTooltip Movie="_hoveredMovie" OnMouseEnter="CancelUnhover" OnMouseLeave="ScheduleUnhover" />
+}
+
 @code {
     private List<MovieDto> popularMovies = [];
     private List<MovieDto> topRatedMovies = [];
@@ -57,6 +69,11 @@
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
     private DateTime _tokenExpiry = DateTime.MinValue;
+
+    private MovieDto? _hoveredMovie;
+    private CancellationTokenSource? _hoverCts;
+    private double _mouseX;
+    private double _mouseY;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -123,10 +140,84 @@
         }
     }
 
+    private void HoverMovie(MovieDto movie, MouseEventArgs e)
+    {
+        _mouseX = e.ClientX;
+        _mouseY = e.ClientY;
+
+        if (_hoveredMovie != null)
+        {
+            _hoverCts?.Cancel();
+            _hoveredMovie = movie;
+            StateHasChanged();
+            _ = JS.InvokeVoidAsync("updateTooltipPosition", _mouseX, _mouseY);
+            return;
+        }
+
+        _hoverCts?.Cancel();
+        _hoverCts = new CancellationTokenSource();
+        var cts = _hoverCts;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(200, cts.Token);
+                await InvokeAsync(async () =>
+                {
+                    _hoveredMovie = movie;
+                    StateHasChanged();
+                    await JS.InvokeVoidAsync("updateTooltipPosition", _mouseX, _mouseY);
+                });
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private void TrackMouseMove(MouseEventArgs e)
+    {
+        _mouseX = e.ClientX;
+        _mouseY = e.ClientY;
+    }
+
+    private void ScheduleUnhover()
+    {
+        if (_hoveredMovie == null)
+        {
+            _hoverCts?.Cancel();
+            return;
+        }
+
+        _hoverCts?.Cancel();
+        _hoverCts = new CancellationTokenSource();
+        var cts = _hoverCts;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(200, cts.Token);
+                await InvokeAsync(() =>
+                {
+                    _hoveredMovie = null;
+                    StateHasChanged();
+                });
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private void CancelUnhover()
+    {
+        _hoverCts?.Cancel();
+    }
+
     public void Dispose()
     {
         _cts?.Cancel();
         _cts?.Dispose();
         _timer?.Dispose();
+        _hoverCts?.Cancel();
+        _hoverCts?.Dispose();
     }
 }

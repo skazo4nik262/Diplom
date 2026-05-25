@@ -28,6 +28,7 @@ namespace CatalogService
 
             builder.Services.AddScoped<ITmdbService, TmdbService>();
             builder.Services.AddScoped<IPostgresService, PostgresService>();
+            builder.Services.AddHttpClient();
 
             var embeddingUrl = builder.Configuration.GetValue<string>("EmbeddingService:Url") ?? "http://localhost:5005";
             builder.Services.AddScoped<IEmbeddingClient>(_ => new HttpEmbeddingClient(embeddingUrl));

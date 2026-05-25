@@ -15,12 +15,24 @@
 
 <body>
     <Routes @rendermode="InteractiveServer" />
-    <MudThemeProvider IsDarkMode="true"/>
-    <MudDialogProvider />
-    <MudSnackbarProvider />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script src="@Assets["_content/MudBlazor/MudBlazor.min.js"]"></script>
+    <script>
+        window.updateTooltipPosition = function(x, y) {
+            var el = document.getElementById('movie-tooltip');
+            if (!el) return;
+            var w = el.offsetWidth, h = el.offsetHeight;
+            var pad = 20;
+            var left = x + pad, top = y + pad;
+            if (left + w > window.innerWidth - 10) left = window.innerWidth - w - 10;
+            if (top + h > window.innerHeight - 10) top = window.innerHeight - h - 10;
+            if (left < 0) left = 0;
+            if (top < 0) top = 0;
+            el.style.left = left + 'px';
+            el.style.top = top + 'px';
+        };
+    </script>
 </body>
 
 </html>

@@ -1,0 +1,72 @@
+@implements IDisposable
+@inject IJSRuntime JS
+
+<div class="hero-wrapper">
+    <div class="hero-carousel" @ref="_carouselRef">
+        @foreach (var movie in Movies)
+        {
+            <div class="hero-card" style="background-image: url('@movie.PosterUrl')">
+                <div class="hero-overlay">
+                    <div class="hero-info">
+                        <div class="hero-title">@movie.Title</div>
+                        <div class="hero-meta">
+                            <span class="hero-rating">@movie.RatingText</span>
+                            <span class="hero-year">@movie.ReleaseYear</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<MovieDto> Movies { get; set; } = [];
+
+    private ElementReference _carouselRef;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && Movies.Count > 0)
+            StartAutoScroll();
+    }
+
+    private void StartAutoScroll()
+    {
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(4));
+        _ = AutoScrollAsync(_cts.Token);
+    }
+
+    private async Task AutoScrollAsync(CancellationToken ct)
+    {
+        while (await _timer!.WaitForNextTickAsync(ct))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("eval", ct, $@"
+                    (function() {{
+                        var el = document.querySelector('.hero-carousel');
+                        if (!el) return;
+                        var maxScroll = el.scrollWidth - el.clientWidth;
+                        if (el.scrollLeft >= maxScroll - 10) {{
+                            el.scrollTo({{ left: 0, behavior: 'smooth' }});
+                        }} else {{
+                            el.scrollBy({{ left: el.clientWidth * 0.8, behavior: 'smooth' }});
+                        }}
+                    }})();
+                ");
+            }
+            catch { }
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+    }
+}

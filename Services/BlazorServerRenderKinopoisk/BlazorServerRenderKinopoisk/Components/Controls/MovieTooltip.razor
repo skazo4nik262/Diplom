@@ -1,0 +1,97 @@
+@implements IDisposable
+
+<div class="tooltip-card" id="movie-tooltip" style="background-image: url('@Movie.PosterUrl')" @onmouseenter="() => OnMouseEnter.InvokeAsync()" @onmouseleave="() => OnMouseLeave.InvokeAsync()">
+    @if (_readMoreMode)
+    {
+        <div class="tooltip-readmore">
+            <div class="tooltip-backbar">
+                <button class="tooltip-back-btn" @onclick="GoBack">← Back</button>
+            </div>
+            <div class="tooltip-divider"></div>
+            <div class="tooltip-fulloverview">
+                @Movie.Overview
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="tooltip-gradient">
+            <div class="tooltip-spacer"></div>
+            <div class="tooltip-meta">@MetaText</div>
+            <div class="tooltip-overview">
+                @_displayOverview
+                @if (_showReadMore)
+                {
+                    <button class="tooltip-readmore-btn" @onclick="GoReadMore">read more</button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public MovieDto Movie { get; set; } = null!;
+    [Parameter] public EventCallback OnMouseEnter { get; set; }
+    [Parameter] public EventCallback OnMouseLeave { get; set; }
+
+    private bool _readMoreMode;
+    private bool _showReadMore;
+    private string _displayOverview = "";
+    private const int OverviewLimit = 120;
+
+    private string MetaText
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(Movie.ReleaseYear))
+                parts.Add(Movie.ReleaseYear);
+            if (Movie.Runtime.HasValue)
+                parts.Add($"{Movie.Runtime.Value} min");
+            if (Movie.Genres?.Count > 0)
+                parts.AddRange(Movie.Genres.Take(2).Select(g => g.Name ?? ""));
+            return string.Join(", ", parts.Where(p => !string.IsNullOrEmpty(p)));
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        _readMoreMode = false;
+        UpdateDisplay();
+    }
+
+    private void UpdateDisplay()
+    {
+        if (Movie == null) return;
+
+        if (string.IsNullOrEmpty(Movie.Overview))
+        {
+            _displayOverview = "No overview available";
+            _showReadMore = false;
+        }
+        else if (Movie.Overview.Length <= OverviewLimit)
+        {
+            _displayOverview = Movie.Overview;
+            _showReadMore = false;
+        }
+        else
+        {
+            _displayOverview = Movie.Overview[..OverviewLimit] + "...";
+            _showReadMore = true;
+        }
+    }
+
+    private void GoReadMore()
+    {
+        _readMoreMode = true;
+        StateHasChanged();
+    }
+
+    private void GoBack()
+    {
+        _readMoreMode = false;
+        StateHasChanged();
+    }
+
+    public void Dispose() { }
+}

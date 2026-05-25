@@ -1,0 +1,92 @@
+@page "/search"
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+
+<MudContainer Class="mt-4">
+    @if (isLoading)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudProgressCircular Indeterminate Size="Size.Large" />
+        </div>
+    }
+    else if (movies.Count == 0)
+    {
+        <MudContainer Class="d-flex justify-center mt-16">
+            <MudText Typo="Typo.h6" Style="opacity: 0.5">No movies found</MudText>
+        </MudContainer>
+    }
+    else
+    {
+        <MudText Typo="Typo.h5" Class="mb-4">Search results for "@query"</MudText>
+        <div class="carousel">
+            @foreach (var movie in movies)
+            {
+                <MudCard Class="movie-card" Outlined="false">
+                    <MudCardMedia Image="@movie.PosterUrl" Height="225" />
+                    <MudCardContent Class="pa-2">
+                        <MudText Typo="Typo.body2" Class="movie-title">@movie.Title</MudText>
+                        <div class="d-flex align-center justify-space-between">
+                            <MudText Typo="Typo.caption" Color="Color.Primary">@movie.RatingText</MudText>
+                            <MudText Typo="Typo.caption" Style="opacity: 0.5">@movie.ReleaseYear</MudText>
+                        </div>
+                    </MudCardContent>
+                </MudCard>
+            }
+        </div>
+    }
+</MudContainer>
+
+@code {
+    [SupplyParameterFromQuery] public string? Query { get; set; }
+
+    private List<MovieDto> movies = [];
+    private string? query;
+    private bool isLoading = true;
+    private bool initialized;
+
+    protected override async Task OnInitializedAsync()
+    {
+        initialized = true;
+        await SearchAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (initialized)
+            await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        query = Query;
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            isLoading = false;
+            return;
+        }
+
+        isLoading = true;
+        StateHasChanged();
+
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        try
+        {
+            movies = await Catalog.SearchAsync(query);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        isLoading = false;
+    }
+}

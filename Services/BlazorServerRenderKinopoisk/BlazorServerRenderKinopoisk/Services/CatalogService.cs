@@ -48,4 +48,22 @@ public class CatalogService
         }
         catch { return []; }
     }
+
+    public async Task<List<MovieDto>> SearchAsync(string query, int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/movies/search")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("query", query)
+                .SetQueryParam("page", page)
+                .GetJsonAsync<List<MovieDto>>();
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { return []; }
+    }
 }

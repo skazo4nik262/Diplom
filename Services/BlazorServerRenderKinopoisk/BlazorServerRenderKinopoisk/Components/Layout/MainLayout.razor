@@ -1,9 +1,43 @@
 ﻿@inherits LayoutComponentBase
+@inject NavigationManager Navigation
 
-@Body
+<MudThemeProvider Theme="_theme" IsDarkMode="true" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+@if (_showAppBar)
+{
+    <AppBar />
+}
+
+<div class="main-content @(_showAppBar ? "" : "no-appbar")">
+    @Body
+</div>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private bool _showAppBar = true;
+
+    protected override void OnParametersSet()
+    {
+        var uri = Navigation.Uri;
+        _showAppBar = !uri.EndsWith("/login") && !uri.EndsWith("/login/")
+                    && !uri.EndsWith("/register") && !uri.EndsWith("/register/");
+    }
+
+    private MudTheme _theme = new()
+    {
+        PaletteDark = new PaletteDark()
+        {
+            Primary = "#F6C516",
+            Background = "#000000",
+            Surface = "#0f0f0f",
+        }
+    };
+}

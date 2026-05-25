@@ -1,0 +1,62 @@
+.hero-wrapper {
+    width: 100%;
+    overflow: hidden;
+    border-radius: 16px;
+}
+
+.hero-carousel {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    gap: 8px;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+}
+
+.hero-carousel::-webkit-scrollbar {
+    display: none;
+}
+
+.hero-card {
+    flex: 0 0 80%;
+    height: 360px;
+    background-size: cover;
+    background-position: center;
+    border-radius: 12px;
+    position: relative;
+    scroll-snap-align: start;
+    overflow: hidden;
+}
+
+.hero-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 24px;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+}
+
+.hero-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 4px;
+}
+
+.hero-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 0.9rem;
+}
+
+.hero-rating {
+    color: #F6C516;
+    font-weight: 600;
+}
+
+.hero-year {
+    opacity: 0.6;
+    color: #fff;
+}

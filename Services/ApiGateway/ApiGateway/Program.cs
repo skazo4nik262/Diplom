@@ -74,6 +74,15 @@ namespace ApiGateway
         // Защищённые маршруты \\
         new Yarp.ReverseProxy.Configuration.RouteConfig
         {
+            RouteId = "catalog-poster",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/catalog/poster/{**catch-all}"
+            },
+            ClusterId = "catalog-cluster",
+        },
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
             RouteId = "jellyfin",
             Match = new Yarp.ReverseProxy.Configuration.RouteMatch
             {
