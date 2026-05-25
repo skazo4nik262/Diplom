@@ -1,0 +1,17 @@
+.carousel {
+    display: flex;
+    overflow-x: auto;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.movie-card {
+    flex: 0 0 150px;
+}
+
+.movie-title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}

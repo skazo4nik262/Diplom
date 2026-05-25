@@ -1,0 +1,130 @@
+version: '3.8'
+services:
+#----------------------------------------------------------------
+  vless-proxy:
+    image: ghcr.io/sagernet/sing-box:latest
+    container_name: vless-proxy
+    restart: unless-stopped
+    command: ["run", "-c", "/etc/sing-box/config.json"]
+    volumes:
+      - ./sing-box-config.json:/etc/sing-box/config.json
+    ports:
+      - "1080:1080"
+#----------------------------------------------------------------
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    volumes:
+      - D:/Jellyfin/config:/config
+      - D:/Jellyfin/cache:/cache
+      - D:/Jellyfin/media:/media
+    ports:
+      - "8096:8096"
+    restart: unless-stopped
+#----------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: MyPostgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: skazo4nik
+      POSTGRES_PASSWORD: qaz123wsx
+      POSTGRES_DB: mydb
+    ports:
+      - "54320:5432"
+    volumes:
+      - D:/Postgres/pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skazo4nik -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+#----------------------------------------------------------------
+  catalog-service:
+    build: ./Services/CatalogService/CatalogService
+    container_name: catalog-service
+    environment:
+      - ConnectionStrings__Default=Host=postgres;Database=mydb;Username=skazo4nik;Password=qaz123wsx
+      - Jwt__Key=your_very_long_secret_key_at_least_32_chars
+      - Jwt__Issuer=IdentityService
+      - Jwt__Audience=JellyfinService
+      - HTTP_PROXY=socks5://vless-proxy:1080
+      - HTTPS_PROXY=socks5://vless-proxy:1080
+      - http_proxy=socks5://vless-proxy:1080
+      - https_proxy=socks5://vless-proxy:1080
+      - DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=1
+      - TMDB_API_KEY=76ac486e8244a34f77259b927d1852e5
+      - EmbeddingService__Url=http://embedding-service:5004
+    depends_on:
+      vless-proxy:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+#----------------------------------------------------------------
+  identity-service:
+    build: ./Services/IdentityService/IdentityService
+    container_name: identity-service
+    environment:
+      - ConnectionStrings__Default=Host=postgres;Database=mydb;Username=skazo4nik;Password=qaz123wsx
+      - Jwt__Key=your_very_long_secret_key_at_least_32_chars
+      - Jwt__Issuer=IdentityService
+      - Jwt__Audience=JellyfinService
+    depends_on:
+      postgres:
+        condition: service_healthy
+#----------------------------------------------------------------
+  jellyfin-service:
+    build: ./Services/JellyfinService/JellyfinService
+    container_name: jellyfin-service
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=mydb;Username=skazo4nik;Password=qaz123wsx
+      - Jwt__Key=your_very_long_secret_key_at_least_32_chars
+      - Jwt__Issuer=IdentityService
+      - Jwt__Audience=JellyfinService
+      - Jellyfin__Url=http://jellyfin:8096
+      - Jellyfin__ApiKey=28176db7279d476d999a8600efde4b61
+    depends_on:
+      postgres:
+        condition: service_healthy
+      jellyfin:
+        condition: service_started
+#----------------------------------------------------------------
+  api-gateway:
+    build: ./Services/ApiGateway/ApiGateway
+    container_name: api-gateway
+    ports:
+      - "5000:5000"  # единственный публичный вход
+    environment:
+      - Jwt__Key=your_very_long_secret_key_at_least_32_chars
+      - Jwt__Issuer=IdentityService
+      - Jwt__Audience=JellyfinService
+    depends_on:
+      - identity-service
+      - jellyfin-service
+#----------------------------------------------------------------
+  embedding-service:
+    build: ./Services/EmbeddingService/EmbeddingService
+    container_name: embedding-service
+    environment:
+      - Ollama__Url=http://ollama:11434
+      - Clip__Url=http://clip:51000
+    depends_on:
+      ollama:
+        condition: service_started
+      clip:
+        condition: service_started
+#----------------------------------------------------------------
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: ["sh", "-c", "ollama serve & sleep 2 && ollama pull nomic-embed-text && wait"]
+#----------------------------------------------------------------
+  clip:
+    image: jinaai/clip-as-service
+    container_name: clip
+#----------------------------------------------------------------
+
+volumes:
+  ollama_data:

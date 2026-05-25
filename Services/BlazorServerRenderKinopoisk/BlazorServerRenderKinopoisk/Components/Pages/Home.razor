@@ -1,0 +1,16 @@
+﻿@page "/"
+@rendermode InteractiveServer
+
+<PageTitle>Home</PageTitle>
+@inject NavigationManager Navigation
+@inject TokenStore TokenStore
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+        Navigation.NavigateTo(TokenStore.IsAuthenticated ? "/main" : "/login");
+    }
+}

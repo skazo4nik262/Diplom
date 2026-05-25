@@ -1,0 +1,60 @@
+﻿@page "/login"
+@rendermode InteractiveServer
+@inject AuthService AuthService
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex flex-column align-center mt-16">
+    <MudCard Elevated Class="pa-8" Style="width: 100%; max-width: 420px;">
+        <MudCardContent>
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-8">Welcome</MudText>
+
+            <MudTextField @bind-Value="login" Label="Login" Variant="Variant.Outlined" Class="mb-4" />
+            <MudTextField @bind-Value="password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-6" />
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                       Disabled="@isLoading" OnClick="@HandleLogin" Class="mb-4" Size="Size.Large">
+                @(isLoading ? "Logging in..." : "Login")
+                @if (isLoading)
+                {
+                    <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
+                }
+            </MudButton>
+
+            <MudText Align="Align.Center">
+                <MudLink Href="/register">Don't have an account? Register</MudLink>
+            </MudText>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private string login = "";
+    private string password = "";
+    private bool isLoading;
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(login) || string.IsNullOrWhiteSpace(password))
+        {
+            Snackbar.Add("Fill in all fields", Severity.Warning);
+            return;
+        }
+
+        isLoading = true;
+
+        var (result, err) = await AuthService.LoginAsync(login, password);
+
+        isLoading = false;
+
+        if (result is null)
+        {
+            Snackbar.Add(err ?? "Login failed", Severity.Error);
+            return;
+        }
+
+        await TokenStore.SaveAsync(result.Token);
+        Navigation.NavigateTo("/main");
+    }
+}

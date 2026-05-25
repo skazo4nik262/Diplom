@@ -1,0 +1,132 @@
+﻿@page "/main"
+@rendermode InteractiveServer
+@implements IDisposable
+@inject CatalogService Catalog
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+
+<MudContainer Class="mt-4">
+    <MudText Typo="Typo.h5" Class="mb-2">Popular Movies</MudText>
+    <div class="carousel">
+        @foreach (var movie in popularMovies)
+        {
+            <MudCard Class="movie-card" Outlined="false">
+                <MudCardMedia Image="@movie.PosterUrl" Height="225" />
+                <MudCardContent Class="pa-2">
+                    <MudText Typo="Typo.body2" Class="movie-title">@movie.Title</MudText>
+                    <div class="d-flex align-center ga-2">
+                        <MudText Typo="Typo.caption" Color="Color.Primary">@movie.RatingText</MudText>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.5">@movie.ReleaseYear</MudText>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        }
+    </div>
+
+    <MudText Typo="Typo.h5" Class="mb-2 mt-6">Top Rated</MudText>
+    <div class="carousel">
+        @foreach (var movie in topRatedMovies)
+        {
+            <MudCard Class="movie-card" Outlined="false">
+                <MudCardMedia Image="@movie.PosterUrl" Height="225" />
+                <MudCardContent Class="pa-2">
+                    <MudText Typo="Typo.body2" Class="movie-title">@movie.Title</MudText>
+                    <div class="d-flex align-center ga-2">
+                        <MudText Typo="Typo.caption" Color="Color.Primary">@movie.RatingText</MudText>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.5">@movie.ReleaseYear</MudText>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        }
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudProgressCircular Indeterminate Size="Size.Large" />
+        </div>
+    }
+</MudContainer>
+
+@code {
+    private List<MovieDto> popularMovies = [];
+    private List<MovieDto> topRatedMovies = [];
+    private bool isLoading = true;
+
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+    private DateTime _tokenExpiry = DateTime.MinValue;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        try
+        {
+            var popularTask = Catalog.GetPopularAsync();
+            var topRatedTask = Catalog.GetTopRatedAsync();
+            await Task.WhenAll(popularTask, topRatedTask);
+
+            popularMovies = popularTask.Result;
+            topRatedMovies = topRatedTask.Result;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        isLoading = false;
+        StateHasChanged();
+
+        StartSessionMonitor();
+    }
+
+    private void StartSessionMonitor()
+    {
+        var expiry = TokenStore.GetTokenExpiry();
+        if (expiry == null) return;
+
+        _tokenExpiry = expiry.Value;
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+
+        _ = MonitorSessionAsync(_cts.Token);
+    }
+
+    private async Task MonitorSessionAsync(CancellationToken ct)
+    {
+        while (await _timer!.WaitForNextTickAsync(ct))
+        {
+            if (_tokenExpiry == DateTime.MinValue) break;
+
+            var remaining = _tokenExpiry - DateTime.UtcNow;
+            if (remaining <= TimeSpan.FromSeconds(60))
+            {
+                await InvokeAsync(async () =>
+                {
+                    var dialog = await DialogService.ShowAsync<SessionExpiringDialog>();
+                    await dialog.Result;
+                    Navigation.NavigateTo("/login");
+                });
+                break;
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _timer?.Dispose();
+    }
+}

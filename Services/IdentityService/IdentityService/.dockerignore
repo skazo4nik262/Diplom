@@ -1,0 +1,9 @@
+**/.dockerignore
+**/.git
+**/.vs
+**/bin
+**/obj
+**/Dockerfile*
+**/docker-compose*.yml
+*.user
+*.lock.json

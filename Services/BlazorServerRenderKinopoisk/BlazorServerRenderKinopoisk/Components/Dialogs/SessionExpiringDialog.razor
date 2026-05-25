@@ -1,0 +1,17 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Session Expiring</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>Your session is about to expire. Click OK to log in again.</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Close">OK</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private void Close() => MudDialog.Close();
+}
