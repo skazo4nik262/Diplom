@@ -98,6 +98,13 @@ public class MoviesController : ControllerBase
         return Ok(similar);
     }
 
+    [HttpPost("embeddings/generate-missing")]
+    public async Task<IActionResult> GenerateMissingEmbeddings()
+    {
+        var result = await _postgres.RebuildAllEmbeddingsAsync();
+        return Ok(result);
+    }
+
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string query, [FromQuery] int page = 1)
     {

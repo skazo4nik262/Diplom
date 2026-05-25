@@ -1,4 +1,5 @@
-﻿using CatalogService.Data;
+﻿using System.Globalization;
+using CatalogService.Data;
 using CatalogService.Data.Entities;
 using CatalogService.Data.Mappers;
 using Microsoft.EntityFrameworkCore;
@@ -419,6 +420,14 @@ namespace CatalogService.Services
             await _db.SaveChangesAsync();
         }
 
+        public async Task<int?> GetUserMovieRatingAsync(Guid userId, int tmdbId)
+        {
+            return await _db.UserMovies
+                .Where(u => u.UserId == userId && u.MovieId == tmdbId)
+                .Select(u => u.Rating)
+                .FirstOrDefaultAsync();
+        }
+
         public async Task RemoveMovie(int tmdbId)
         {
             var movie = await _db.Movies.FindAsync(tmdbId);
@@ -438,15 +447,30 @@ namespace CatalogService.Services
                 await _db.SaveChangesAsync();
             }
         }
-        public async Task RebuildAllEmbeddingsAsync()
+        public async Task<EmbeddingGenerationResult> RebuildAllEmbeddingsAsync()
         {
             var movieIds = await _db.Movies
                 .Where(m => !_db.MovieEmbeddings.Any(e => e.MovieId == m.Id))
                 .Select(m => m.Id)
                 .ToListAsync();
 
+            var processed = 0;
+            var errors = 0;
+
             foreach (var id in movieIds)
-                await EnsureEmbeddingsAsync(id);
+            {
+                try
+                {
+                    await EnsureEmbeddingsAsync(id);
+                    processed++;
+                }
+                catch
+                {
+                    errors++;
+                }
+            }
+
+            return new EmbeddingGenerationResult(Total: movieIds.Count, Processed: processed, Errors: errors);
         }
         public async Task RemoveCollection(int collectionId)
         {
@@ -591,12 +615,12 @@ namespace CatalogService.Services
         private async Task<List<MovieEntity>> FindNearestMoviesAsync(float[] target, List<int>? excludeIds, int page)
         {
             var exclude = excludeIds ?? [];
-            var embedParam = new Pgvector.Vector(target);
+            var vectorStr = "[" + string.Join(",", target.Select(f => f.ToString("G", CultureInfo.InvariantCulture))) + "]";
             var offset = (page - 1) * PageSize;
 
             var ids = await _db.Database.SqlQueryRaw<int>(
-                "SELECT e.\"MovieId\" FROM \"MovieEmbeddings\" e ORDER BY e.\"Embedding\" <=> {0} LIMIT {1} OFFSET {2}",
-                embedParam, PageSize + exclude.Count, 0).ToListAsync();
+                "SELECT e.\"MovieId\" FROM \"MovieEmbeddings\" e ORDER BY e.\"Embedding\"::vector <=> {0}::vector LIMIT {1} OFFSET {2}",
+                vectorStr, PageSize + exclude.Count, 0).ToListAsync();
 
             var filtered = exclude.Count > 0 ? ids.Where(id => !exclude.Contains(id)).ToList() : ids;
             var paged = filtered.Skip(offset).Take(PageSize).ToList();
@@ -612,4 +636,6 @@ namespace CatalogService.Services
             return paged.Select(id => movies.First(m => m.Id == id)).ToList();
         }
     }
+
+    public record EmbeddingGenerationResult(int Total, int Processed, int Errors);
 }

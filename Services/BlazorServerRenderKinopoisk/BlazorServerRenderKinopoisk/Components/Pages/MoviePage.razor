@@ -53,6 +53,34 @@
                         <span>@string.Join(", ", _movie.ProductionCountries.Select(c => c.Name))</span>
                     }
                 </div>
+                <div class="movie-detail-rating-section">
+                    <span class="movie-detail-rating-label">Your Rating</span>
+                    @if (_showRatingButtons)
+                    {
+                        <div class="movie-detail-rating-buttons">
+                            @for (var i = 1; i <= 10; i++)
+                            {
+                                var idx = i;
+                                <button class="movie-detail-rate-btn@(_userRating == idx ? " selected" : "")"
+                                        @onclick="() => RateMovie(idx)"
+                                        disabled="@_ratingSending">
+                                    @idx
+                                </button>
+                            }
+                        </div>
+                        @if (_ratingSending)
+                        {
+                            <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
+                        }
+                    }
+                    else if (_userRating.HasValue)
+                    {
+                        <div class="movie-detail-rating-display">
+                            <span class="movie-detail-rating-value">@_userRating.Value</span>
+                            <button class="movie-detail-rating-change" @onclick="() => _showRatingButtons = true">change</button>
+                        </div>
+                    }
+                </div>
                 <div class="movie-detail-overview">
                     <span>@DisplayOverview</span>
                     @if (ShowExpandButton)
@@ -83,6 +111,29 @@
                     </div>
                 </div>
             }
+            @if (_similarMovies?.Count > 0)
+            {
+                <div class="mt-4">
+                    <MudText Typo="Typo.h5" Class="mb-2">Similar Movies</MudText>
+                    <div class="carousel-wrapper">
+                        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.similar-carousel'), -1)" type="button">‹</button>
+                        <div class="similar-carousel carousel">
+                            @foreach (var movie in _similarMovies)
+                            {
+                                <div @onclick="() => GoToMovie(movie.Id)" class="movie-card" style="cursor: pointer">
+                                    <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
+                                        <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
+                                            @movie.RatingText
+                                        </div>
+                                    </div>
+                                    <div class="movie-title">@movie.Title</div>
+                                </div>
+                            }
+                        </div>
+                        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.similar-carousel'), 1)" type="button">›</button>
+                    </div>
+                </div>
+            }
         </div>
     }
 </div>
@@ -92,8 +143,12 @@
 
     private MovieDto? _movie;
     private List<CastDto>? _cast;
+    private List<MovieDto>? _similarMovies;
     private bool _expanded;
     private bool _dataLoading = true;
+    private int? _userRating;
+    private bool _ratingSending;
+    private bool _showRatingButtons = true;
 
     private const int OverviewLimit = 250;
 
@@ -111,6 +166,33 @@
         _expanded = !_expanded;
     }
 
+    private async Task RateMovie(int rating)
+    {
+        if (_ratingSending) return;
+        _ratingSending = true;
+        _userRating = rating;
+        try
+        {
+            await Catalog.RateMovieAsync(MovieId, rating);
+            _showRatingButtons = false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        catch
+        {
+            _userRating = null;
+        }
+        _ratingSending = false;
+    }
+
+    private void GoToMovie(int id)
+    {
+        Navigation.NavigateTo($"/movie/{id}");
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -126,10 +208,21 @@
         {
             var movieTask = Catalog.GetByIdAsync(MovieId);
             var castTask = Catalog.GetCreditsAsync(MovieId);
-            await Task.WhenAll(movieTask, castTask);
+            var similarTask = Catalog.GetSimilarAsync(MovieId);
+            var ratingTask = Catalog.GetUserRatingAsync(MovieId);
+            await Task.WhenAll(movieTask, castTask, similarTask, ratingTask);
             _movie = movieTask.Result;
             _cast = castTask.Result;
+            _similarMovies = similarTask.Result;
             _dataLoading = false;
+
+            var existingRating = ratingTask.Result;
+            if (existingRating.HasValue)
+            {
+                _userRating = existingRating.Value;
+                _showRatingButtons = false;
+            }
+
             StateHasChanged();
         }
         catch (UnauthorizedAccessException)

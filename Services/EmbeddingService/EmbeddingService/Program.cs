@@ -12,6 +12,8 @@ builder.Services.AddSingleton<IImageEmbedder>(_ => new ClipImageEmbedder(clipUrl
 
 var app = builder.Build();
 
+new OllamaTextEmbedder().EmbedAsync("bebra");
+
 app.MapControllers();
 
-app.Run();
+app.Run("http://0.0.0.0:5004");

@@ -55,6 +55,7 @@ services:
       - DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=1
       - TMDB_API_KEY=76ac486e8244a34f77259b927d1852e5
       - EmbeddingService__Url=http://embedding-service:5004
+      - NO_PROXY=localhost,127.0.0.1,embedding-service,postgres,ollama,clip
     depends_on:
       vless-proxy:
         condition: service_started
@@ -105,6 +106,8 @@ services:
   embedding-service:
     build: ./Services/EmbeddingService/EmbeddingService
     container_name: embedding-service
+    ports:
+      - "5004:5004"
     environment:
       - Ollama__Url=http://ollama:11434
       - Clip__Url=http://clip:51000

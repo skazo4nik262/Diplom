@@ -83,6 +83,23 @@ public class CatalogService
         catch { return null; }
     }
 
+    public async Task<List<MovieDto>> GetSimilarAsync(int movieId, int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/movies/{movieId}/similar")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("page", page)
+                .GetJsonAsync<List<MovieDto>>();
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { return []; }
+    }
+
     public async Task<List<CastDto>> GetCreditsAsync(int movieId)
     {
         try
@@ -98,4 +115,55 @@ public class CatalogService
         }
         catch { return []; }
     }
+
+    public async Task<List<MovieDto>> GetRecommendationsAsync(int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/movies/recommendations")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("page", page)
+                .GetJsonAsync<List<MovieDto>>();
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { return []; }
+    }
+
+    public async Task<int?> GetUserRatingAsync(int movieId)
+    {
+        try
+        {
+            var response = await _flurl.Request($"api/catalog/user-movies/{movieId}/rating")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<UserRatingResponse>();
+            return response.Rating;
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { return null; }
+    }
+
+    public async Task RateMovieAsync(int movieId, int rating)
+    {
+        try
+        {
+            await _flurl.Request($"api/catalog/user-movies/{movieId}/rate")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PostJsonAsync(new { rating });
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+    }
+
+    private record UserRatingResponse(int? Rating);
 }

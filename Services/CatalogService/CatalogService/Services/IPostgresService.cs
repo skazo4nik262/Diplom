@@ -46,6 +46,7 @@ namespace CatalogService.Services
         Task UpdatePerson(Person person, int personId);
         Task UpdateCollection(CollectionEntity collection);
         Task RateMovieAsync(Guid userId, int tmdbId, int rating);
+        Task<int?> GetUserMovieRatingAsync(Guid userId, int tmdbId);
 
         #endregion
 
@@ -59,7 +60,7 @@ namespace CatalogService.Services
 
         #region Embeddings
         Task EnsureEmbeddingsAsync(int tmdbId);
-        Task RebuildAllEmbeddingsAsync();
+        Task<EmbeddingGenerationResult> RebuildAllEmbeddingsAsync();
         #endregion
     }
 }

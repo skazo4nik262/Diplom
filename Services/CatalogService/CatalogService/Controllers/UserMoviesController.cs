@@ -21,6 +21,16 @@ public class UserMoviesController : ControllerBase
         return Guid.Empty;
     }
 
+    [HttpGet("{tmdbId:int}/rating")]
+    public async Task<IActionResult> GetUserMovieRating(int tmdbId)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        var rating = await _postgres.GetUserMovieRatingAsync(userId, tmdbId);
+        return Ok(new { rating });
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetUserMovies([FromQuery] string? status, [FromQuery] int page = 1)
     {

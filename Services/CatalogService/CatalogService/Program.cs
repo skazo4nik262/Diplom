@@ -19,6 +19,7 @@ namespace CatalogService
             dataSourceBuilder.UseVector();
             var dataSource = dataSourceBuilder.Build();
 
+
             builder.Services.AddControllers()
                 .AddJsonOptions(options =>
                     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);

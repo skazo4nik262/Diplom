@@ -9,6 +9,28 @@
 
 <Hero Movies="popularMovies" />
 
+    @if (recommendedMovies.Count > 0)
+    {
+        <MudText Typo="Typo.h5" Class="mb-2 mt-4">Recommended For You</MudText>
+        <div class="carousel-wrapper">
+            <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), -1)" type="button">‹</button>
+            <div class="carousel">
+                @foreach (var movie in recommendedMovies)
+                {
+                    <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="UnhoverMovie" @onmousemove="(e) => TrackMouse(e)" class="movie-card">
+                        <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
+                            <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
+                                @movie.RatingText
+                            </div>
+                        </div>
+                        <div class="movie-title">@movie.Title</div>
+                    </div>
+                }
+            </div>
+            <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), 1)" type="button">›</button>
+        </div>
+    }
+
     <MudText Typo="Typo.h5" Class="mb-2 mt-4">Popular Movies</MudText>
     <div class="carousel-wrapper">
         <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), -1)" type="button">‹</button>
@@ -62,6 +84,7 @@
 @code {
     private List<MovieDto> popularMovies = [];
     private List<MovieDto> topRatedMovies = [];
+    private List<MovieDto> recommendedMovies = [];
     private bool isLoading = true;
 
     private PeriodicTimer? _timer;
@@ -89,10 +112,12 @@
         {
             var popularTask = Catalog.GetPopularAsync();
             var topRatedTask = Catalog.GetTopRatedAsync();
-            await Task.WhenAll(popularTask, topRatedTask);
+            var recsTask = Catalog.GetRecommendationsAsync();
+            await Task.WhenAll(popularTask, topRatedTask, recsTask);
 
             popularMovies = popularTask.Result;
             topRatedMovies = topRatedTask.Result;
+            recommendedMovies = recsTask.Result;
         }
         catch (UnauthorizedAccessException)
         {
