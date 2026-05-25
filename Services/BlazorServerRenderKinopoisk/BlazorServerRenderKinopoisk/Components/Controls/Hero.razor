@@ -2,20 +2,25 @@
 @inject IJSRuntime JS
 
 <div class="hero-wrapper">
+    <button class="hero-arrow hero-arrow-left" @onclick="() => ScrollHero(-1)" type="button">‹</button>
     <div class="hero-carousel" @ref="_carouselRef">
         @foreach (var movie in Movies)
         {
             <div class="hero-card" style="background-image: url('@movie.PosterUrl')">
-                <div class="hero-overlay">
-                    <div class="hero-info">
-                        <div class="hero-title">@movie.Title</div>
-                        <div class="hero-meta">
-                            <span class="hero-rating">@movie.RatingText</span>
-                            <span class="hero-year">@movie.ReleaseYear</span>
-                        </div>
-                    </div>
+                <div class="hero-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
+                    @movie.RatingText
+                </div>
+                <div class="hero-title-overlay">
+                    <div class="hero-title">@movie.Title</div>
                 </div>
             </div>
+        }
+    </div>
+    <button class="hero-arrow hero-arrow-right" @onclick="() => ScrollHero(1)" type="button">›</button>
+    <div class="hero-dots">
+        @for (int i = 0; i < Movies.Count; i++)
+        {
+            <span class="hero-dot @(i == _currentIndex ? "active" : "")" @onclick="() => ScrollToIndex(i)"></span>
         }
     </div>
 </div>
@@ -24,13 +29,19 @@
     [Parameter] public List<MovieDto> Movies { get; set; } = [];
 
     private ElementReference _carouselRef;
+    private int _currentIndex;
+    private double? _cardStep;
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
+    private bool _autoScrollStarted;
 
-    protected override void OnAfterRender(bool firstRender)
+    protected override void OnParametersSet()
     {
-        if (firstRender && Movies.Count > 0)
+        if (!_autoScrollStarted && Movies.Count > 0)
+        {
+            _autoScrollStarted = true;
             StartAutoScroll();
+        }
     }
 
     private void StartAutoScroll()
@@ -44,23 +55,37 @@
     {
         while (await _timer!.WaitForNextTickAsync(ct))
         {
-            try
+            var next = _currentIndex + 1;
+            if (next >= Movies.Count) next = 0;
+            await InvokeAsync(async () =>
             {
-                await JS.InvokeVoidAsync("eval", ct, $@"
-                    (function() {{
-                        var el = document.querySelector('.hero-carousel');
-                        if (!el) return;
-                        var maxScroll = el.scrollWidth - el.clientWidth;
-                        if (el.scrollLeft >= maxScroll - 10) {{
-                            el.scrollTo({{ left: 0, behavior: 'smooth' }});
-                        }} else {{
-                            el.scrollBy({{ left: el.clientWidth * 0.8, behavior: 'smooth' }});
-                        }}
-                    }})();
-                ");
-            }
-            catch { }
+                _currentIndex = next;
+                await ScrollToPosition();
+            });
         }
+    }
+
+    private async Task ScrollHero(int dir)
+    {
+        var newIndex = _currentIndex + dir;
+        if (newIndex < 0 || newIndex >= Movies.Count) return;
+        _currentIndex = newIndex;
+        await ScrollToPosition();
+    }
+
+    private async Task ScrollToIndex(int index)
+    {
+        if (index < 0 || index >= Movies.Count) return;
+        _currentIndex = index;
+        await ScrollToPosition();
+    }
+
+    private async Task ScrollToPosition()
+    {
+        if (_cardStep == null)
+            _cardStep = await JS.InvokeAsync<double>("getHeroCardStep", _carouselRef);
+        await JS.InvokeVoidAsync("scrollHeroTo", _carouselRef, _currentIndex * _cardStep.Value);
+        StateHasChanged();
     }
 
     public void Dispose()

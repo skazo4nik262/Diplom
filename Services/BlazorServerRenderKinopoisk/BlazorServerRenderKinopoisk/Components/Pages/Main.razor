@@ -7,37 +7,44 @@
 @inject IDialogService DialogService
 @inject IJSRuntime JS
 
-<MudContainer Class="mt-4">
-    <Hero Movies="popularMovies" />
+<Hero Movies="popularMovies" />
 
     <MudText Typo="Typo.h5" Class="mb-2 mt-4">Popular Movies</MudText>
-    <div class="carousel">
-        @foreach (var movie in popularMovies)
-        {
-            <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="ScheduleUnhover" @onmousemove="(e) => TrackMouseMove(e)" class="movie-card">
-                <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
-                    <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
-                        @movie.RatingText
+    <div class="carousel-wrapper">
+        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), -1)" type="button">‹</button>
+        <div class="carousel">
+            @foreach (var movie in popularMovies)
+            {
+                <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="UnhoverMovie" @onmousemove="(e) => TrackMouse(e)" class="movie-card">
+                    <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
+                        <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
+                            @movie.RatingText
+                        </div>
                     </div>
+                    <div class="movie-title">@movie.Title</div>
                 </div>
-                <div class="movie-title">@movie.Title</div>
-            </div>
-        }
+            }
+        </div>
+        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), 1)" type="button">›</button>
     </div>
 
     <MudText Typo="Typo.h5" Class="mb-2 mt-6">Top Rated</MudText>
-    <div class="carousel">
-        @foreach (var movie in topRatedMovies)
-        {
-            <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="ScheduleUnhover" @onmousemove="(e) => TrackMouseMove(e)" class="movie-card">
-                <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
-                    <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
-                        @movie.RatingText
+    <div class="carousel-wrapper">
+        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), -1)" type="button">‹</button>
+        <div class="carousel">
+            @foreach (var movie in topRatedMovies)
+            {
+                <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="UnhoverMovie" @onmousemove="(e) => TrackMouse(e)" class="movie-card">
+                    <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
+                        <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
+                            @movie.RatingText
+                        </div>
                     </div>
+                    <div class="movie-title">@movie.Title</div>
                 </div>
-                <div class="movie-title">@movie.Title</div>
-            </div>
-        }
+            }
+        </div>
+        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), 1)" type="button">›</button>
     </div>
 
     @if (isLoading)
@@ -46,7 +53,6 @@
             <MudProgressCircular Indeterminate Size="Size.Large" />
         </div>
     }
-</MudContainer>
 
 @if (_hoveredMovie != null)
 {
@@ -157,6 +163,8 @@
                 await Task.Delay(200, cts.Token);
                 await InvokeAsync(() =>
                 {
+                    if (cts.IsCancellationRequested) return;
+                    if (_hoveredMovie == movie) return;
                     _hoveredMovie = movie;
                     _ = JS.InvokeVoidAsync("setTooltipPos", _mouseX, _mouseY);
                     StateHasChanged();
@@ -166,19 +174,22 @@
         });
     }
 
-    private void TrackMouseMove(MouseEventArgs e)
+    private void TrackMouse(MouseEventArgs e)
     {
         _mouseX = e.ClientX;
         _mouseY = e.ClientY;
     }
 
+    private void UnhoverMovie()
+    {
+        _hoverCts?.Cancel();
+        if (_hoveredMovie != null)
+            ScheduleUnhover();
+    }
+
     private void ScheduleUnhover()
     {
-        if (_hoveredMovie == null)
-        {
-            _hoverCts?.Cancel();
-            return;
-        }
+        if (_hoveredMovie == null) return;
 
         _hoverCts?.Cancel();
         _hoverCts = new CancellationTokenSource();

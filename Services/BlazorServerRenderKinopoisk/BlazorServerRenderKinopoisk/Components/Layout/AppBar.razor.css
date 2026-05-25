@@ -9,7 +9,7 @@
     align-items: center;
     gap: 16px;
     padding: 8px 24px;
-    background: rgba(0, 0, 0, 0.82);
+    background: rgba(15, 15, 15, 0.82);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: 16px;

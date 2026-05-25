@@ -90,3 +90,32 @@
 .tooltip-fulloverview::-webkit-scrollbar {
     display: none;
 }
+
+.tooltip-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.tooltip-action-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: #0f0f0f;
+    color: #fff;
+    transition: opacity 0.15s;
+}
+
+.tooltip-action-btn:hover {
+    opacity: 0.8;
+}
+
+.tooltip-play-btn {
+    background: #F6C516;
+    color: #0f0f0f;
+}

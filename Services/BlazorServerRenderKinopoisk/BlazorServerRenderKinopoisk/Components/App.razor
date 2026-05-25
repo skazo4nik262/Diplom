@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="@Assets["_content/MudBlazor/MudBlazor.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <link rel="stylesheet" href="@Assets["BlazorServerRenderKinopoisk.styles.css"]" />
     <ImportMap />
     <HeadOutlet @rendermode="InteractiveServer" />
@@ -18,6 +19,7 @@
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script src="@Assets["_content/MudBlazor/MudBlazor.min.js"]"></script>
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
         window._tooltipPos = { x: 0, y: 0 };
 
@@ -40,6 +42,49 @@
             if (top < 0) top = 10;
             el.style.left = left + 'px';
             el.style.top = top + 'px';
+        };
+        window.scrollCarousel = function(el, dir) {
+            var card = el.querySelector('.movie-card');
+            var step = (card ? card.offsetWidth + 12 : 162) * 4;
+            el.scrollBy({ left: dir * step, behavior: 'smooth' });
+        };
+
+        window.scrollCastCarousel = function(el, dir) {
+            var card = el.querySelector('.cast-card');
+            var step = (card ? card.offsetWidth + 12 : 140) * 4;
+            el.scrollBy({ left: dir * step, behavior: 'smooth' });
+        };
+
+        window.getHeroCardStep = function(el) {
+            var card = el.querySelector('.hero-card');
+            return card ? card.offsetWidth + 36 : 486;
+        };
+
+        window.scrollHeroTo = function(el, left) {
+            el.scrollTo({ left: left, behavior: 'smooth' });
+        };
+
+        window.initInfiniteScroll = function(dotnetHelper) {
+            var ticking = false;
+            function onScroll() {
+                if (!ticking) {
+                    window.requestAnimationFrame(function() {
+                        var scrollBottom = window.innerHeight + window.scrollY;
+                        var threshold = document.documentElement.scrollHeight - 500;
+                        if (scrollBottom >= threshold) {
+                            dotnetHelper.invokeMethodAsync('LoadMore');
+                        }
+                        ticking = false;
+                    });
+                    ticking = true;
+                }
+            }
+            window.addEventListener('scroll', onScroll);
+        };
+
+        window.initMoviePlayer = function() {
+            var el = document.getElementById('movie-player');
+            if (el && !el.plyr) new Plyr(el);
         };
     </script>
 </body>

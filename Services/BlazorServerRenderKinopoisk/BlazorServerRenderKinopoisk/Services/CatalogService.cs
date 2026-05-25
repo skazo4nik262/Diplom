@@ -66,4 +66,36 @@ public class CatalogService
         }
         catch { return []; }
     }
+
+    public async Task<MovieDto?> GetByIdAsync(int id)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/movies/{id}")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<MovieDto>();
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { return null; }
+    }
+
+    public async Task<List<CastDto>> GetCreditsAsync(int movieId)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/movies/{movieId}/cast")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<List<CastDto>>();
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { return []; }
+    }
 }

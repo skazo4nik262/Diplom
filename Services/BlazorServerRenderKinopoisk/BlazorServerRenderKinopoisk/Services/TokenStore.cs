@@ -19,20 +19,24 @@ namespace BlazorServerRenderKinopoisk.Services
         public async Task SaveAsync(string token)
         {
             Token = token;
-            await _js.InvokeVoidAsync("localStorage.setItem", "auth_token", token);
+            try { await _js.InvokeVoidAsync("localStorage.setItem", "auth_token", token); } catch { }
         }
 
         public async Task LoadFromStorageAsync()
         {
-            var result = await _js.InvokeAsync<string?>("localStorage.getItem", "auth_token");
-            if (!string.IsNullOrEmpty(result))
-                Token = result;
+            try
+            {
+                var result = await _js.InvokeAsync<string?>("localStorage.getItem", "auth_token");
+                if (!string.IsNullOrEmpty(result))
+                    Token = result;
+            }
+            catch { }
         }
 
         public async Task ClearAsync()
         {
             Token = null;
-            await _js.InvokeVoidAsync("localStorage.removeItem", "auth_token");
+            try { await _js.InvokeVoidAsync("localStorage.removeItem", "auth_token"); } catch { }
         }
 
         public DateTime? GetTokenExpiry()

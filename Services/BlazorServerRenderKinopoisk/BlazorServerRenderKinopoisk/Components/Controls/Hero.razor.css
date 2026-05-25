@@ -1,7 +1,6 @@
 .hero-wrapper {
-    width: 100%;
-    overflow: hidden;
-    border-radius: 16px;
+    position: relative;
+    margin-bottom: 4px;
 }
 
 .hero-carousel {
@@ -9,9 +8,10 @@
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
-    gap: 8px;
-    scroll-snap-type: x mandatory;
+    gap: 36px;
+    padding: 8px 0;
     scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
 }
 
 .hero-carousel::-webkit-scrollbar {
@@ -19,17 +19,32 @@
 }
 
 .hero-card {
-    flex: 0 0 80%;
-    height: 360px;
+    flex: 0 0 450px;
+    aspect-ratio: 2 / 3;
     background-size: cover;
     background-position: center;
-    border-radius: 12px;
+    border-radius: 16px;
     position: relative;
-    scroll-snap-align: start;
     overflow: hidden;
 }
 
-.hero-overlay {
+.hero-rating-badge {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    top: 10px;
+    left: 10px;
+}
+
+.hero-rating-badge.high-rating {
+    border: 2px solid #F6C516;
+}
+
+.hero-title-overlay {
     position: absolute;
     bottom: 0;
     left: 0;
@@ -39,24 +54,80 @@
 }
 
 .hero-title {
-    font-size: 1.4rem;
+    font-size: 1.5rem;
     font-weight: 600;
     color: #fff;
-    margin-bottom: 4px;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
-.hero-meta {
+.hero-arrow {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+    border: none;
+    cursor: pointer;
+    width: 60px;
     display: flex;
-    gap: 12px;
-    font-size: 0.9rem;
-}
-
-.hero-rating {
-    color: #F6C516;
-    font-weight: 600;
-}
-
-.hero-year {
-    opacity: 0.6;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
     color: #fff;
+    opacity: 0;
+    transition: opacity 0.2s;
+    background: none;
+}
+
+.hero-wrapper:hover .hero-arrow {
+    opacity: 1;
+}
+
+.hero-arrow-left {
+    left: 0;
+    background: linear-gradient(to right, rgba(0,0,0,0.7), transparent);
+}
+
+.hero-arrow-right {
+    right: 0;
+    background: linear-gradient(to left, rgba(0,0,0,0.7), transparent);
+}
+
+.hero-arrow:hover {
+    opacity: 1;
+}
+
+.hero-arrow-left:hover {
+    background: linear-gradient(to right, rgba(0,0,0,0.9), rgba(0,0,0,0.4));
+}
+
+.hero-arrow-right:hover {
+    background: linear-gradient(to left, rgba(0,0,0,0.9), rgba(0,0,0,0.4));
+}
+
+.hero-dots {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.hero-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.hero-dot.active {
+    background: #F6C516;
+}
+
+.hero-dot:hover {
+    background: rgba(255, 255, 255, 0.6);
 }

@@ -1,0 +1,143 @@
+@page "/movie/{MovieId:int}"
+@rendermode InteractiveServer
+@inject TokenStore TokenStore
+@inject CatalogService Catalog
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="mt-4">
+    @if (_movie is null)
+    {
+        @if (_dataLoading)
+        {
+            <div class="d-flex justify-center mt-16">
+                <MudProgressCircular Indeterminate Size="Size.Large" />
+            </div>
+        }
+    }
+    else
+    {
+        <div class="movie-detail">
+            <div class="movie-detail-top">
+                <div class="movie-detail-poster-col">
+                    <div class="movie-detail-poster" style="background-image: url('@_movie.PosterUrl')"></div>
+                </div>
+                <div class="movie-detail-info">
+                <div class="movie-detail-rating@(_movie.VoteAverage > 7.0 ? " high-rating" : "")">
+                    @_movie.RatingText
+                </div>
+                <h1 class="movie-detail-title">@_movie.Title</h1>
+                <div class="movie-detail-meta">
+                    <span>@_movie.ReleaseYear</span>
+                    @if (_movie.Runtime.HasValue)
+                    {
+                        <span>@_movie.Runtime.Value min</span>
+                    }
+                </div>
+                @if (_movie.Genres?.Count > 0)
+                {
+                    <div class="movie-detail-genres">
+                        @foreach (var genre in _movie.Genres)
+                        {
+                            <span class="movie-detail-genre">@genre.Name</span>
+                        }
+                    </div>
+                }
+                <div class="movie-detail-extras">
+                    @if (!string.IsNullOrEmpty(_movie.AgeRating))
+                    {
+                        <span class="movie-detail-age">@_movie.AgeRating</span>
+                    }
+                    @if (_movie.ProductionCountries?.Count > 0)
+                    {
+                        <span>@string.Join(", ", _movie.ProductionCountries.Select(c => c.Name))</span>
+                    }
+                </div>
+                <div class="movie-detail-overview">
+                    <span>@DisplayOverview</span>
+                    @if (ShowExpandButton)
+                    {
+                        <button class="movie-detail-expand-btn" @onclick="ToggleExpand">@ExpandButtonText</button>
+                    }
+                    </div>
+                </div>
+            </div>
+            <video id="movie-player" class="movie-detail-player" controls></video>
+            @if (_cast?.Count > 0)
+            {
+                <div class="mt-4">
+                    <MudText Typo="Typo.h5" Class="mb-2">Cast</MudText>
+                    <div class="carousel-wrapper">
+                        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCastCarousel(this.parentElement.querySelector('.cast-carousel'), -1)" type="button">‹</button>
+                        <div class="cast-carousel carousel">
+                            @foreach (var actor in _cast)
+                            {
+                                <div class="cast-card">
+                                    <div class="cast-photo" style="background-image: url('@actor.ProfileUrl')"></div>
+                                    <div class="cast-name">@actor.OriginalName</div>
+                                    <div class="cast-character">@actor.Character</div>
+                                </div>
+                            }
+                        </div>
+                        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCastCarousel(this.parentElement.querySelector('.cast-carousel'), 1)" type="button">›</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int MovieId { get; set; }
+
+    private MovieDto? _movie;
+    private List<CastDto>? _cast;
+    private bool _expanded;
+    private bool _dataLoading = true;
+
+    private const int OverviewLimit = 250;
+
+    private string DisplayOverview => _movie?.Overview is null ? ""
+        : _expanded || _movie.Overview.Length <= OverviewLimit
+            ? _movie.Overview
+            : _movie.Overview[..OverviewLimit] + "...";
+
+    private bool ShowExpandButton => _movie?.Overview?.Length > OverviewLimit;
+
+    private string ExpandButtonText => _expanded ? "свернуть" : "развернуть";
+
+    private void ToggleExpand()
+    {
+        _expanded = !_expanded;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        try
+        {
+            var movieTask = Catalog.GetByIdAsync(MovieId);
+            var castTask = Catalog.GetCreditsAsync(MovieId);
+            await Task.WhenAll(movieTask, castTask);
+            _movie = movieTask.Result;
+            _cast = castTask.Result;
+            _dataLoading = false;
+            StateHasChanged();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await JS.InvokeVoidAsync("initMoviePlayer");
+    }
+}

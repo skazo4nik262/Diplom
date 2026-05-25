@@ -1,8 +1,62 @@
+.carousel-wrapper {
+    position: relative;
+}
+
 .carousel {
     display: flex;
-    overflow-x: auto;
+    overflow: hidden;
     gap: 12px;
     padding: 8px 0;
+    scroll-behavior: smooth;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.carousel::-webkit-scrollbar {
+    display: none;
+}
+
+.carousel-arrow {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+    border: none;
+    cursor: pointer;
+    width: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: #fff;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.carousel-wrapper:hover .carousel-arrow {
+    opacity: 1;
+}
+
+.carousel-arrow-left {
+    left: 0;
+    background: linear-gradient(to right, rgba(0,0,0,0.7), transparent);
+}
+
+.carousel-arrow-right {
+    right: 0;
+    background: linear-gradient(to left, rgba(0,0,0,0.7), transparent);
+}
+
+.carousel-arrow:hover {
+    opacity: 1;
+}
+
+.carousel-arrow-left:hover {
+    background: linear-gradient(to right, rgba(0,0,0,0.9), rgba(0,0,0,0.4));
+}
+
+.carousel-arrow-right:hover {
+    background: linear-gradient(to left, rgba(0,0,0,0.9), rgba(0,0,0,0.4));
 }
 
 .movie-card {
@@ -25,7 +79,7 @@
     top: 6px;
     left: 6px;
     background: rgba(0, 0, 0, 0.75);
-    color: #F6C516;
+    color: #fff;
     border-radius: 6px;
     padding: 2px 7px;
     font-size: 0.75rem;
@@ -57,3 +111,181 @@
     border-radius: 999px !important;
 }
 
+.main-content {
+    padding: 0 5px;
+}
+
+.search-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.movie-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding-top: 16px;
+}
+
+.movie-detail-top {
+    display: flex;
+    gap: 40px;
+}
+
+.movie-detail-poster-col {
+    flex: 0 0 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.movie-detail-poster {
+    aspect-ratio: 2 / 3;
+    background-size: cover;
+    background-position: center;
+    border-radius: 16px;
+}
+
+.movie-detail-player {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+    background: #1a1a1a;
+}
+
+.movie-detail-top .plyr {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.movie-detail-top .plyr--video {
+    background: #1a1a1a;
+}
+
+:root {
+    --plyr-color-main: #F6C516;
+    --plyr-video-controls-background: rgba(15, 15, 15, 0.85);
+    --plyr-menu-background: #1a1a1a;
+    --plyr-menu-color: #fff;
+    --plyr-control-icon-size: 18px;
+}
+
+.movie-detail-info {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.movie-detail-rating {
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    display: inline-block;
+    align-self: flex-start;
+}
+
+.movie-detail-rating.high-rating {
+    border: 2px solid #F6C516;
+}
+
+.movie-detail-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 8px;
+}
+
+.movie-detail-meta {
+    display: flex;
+    gap: 16px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.95rem;
+    margin-bottom: 16px;
+}
+
+.movie-detail-genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.movie-detail-genre {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+}
+
+.movie-detail-overview {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.movie-detail-extras {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+.movie-detail-age {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.movie-detail-expand-btn {
+    background: none;
+    border: none;
+    color: #F6C516;
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.85rem;
+    display: inline;
+    align-self: flex-start;
+}
+
+.cast-card {
+    flex: 0 0 130px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.cast-photo {
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    border-radius: 10px;
+    background-size: cover;
+    background-position: center;
+    background-color: #1a1a1a;
+    margin-bottom: 6px;
+}
+
+.cast-name {
+    font-size: 0.8rem;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cast-character {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
