@@ -9,22 +9,43 @@
     flex: 0 0 150px;
     display: flex;
     flex-direction: column;
+    cursor: pointer;
 }
 
-.movie-card .mud-card-content {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
+.movie-poster {
+    aspect-ratio: 3 / 4;
+    background-size: cover;
+    background-position: center;
+    border-radius: 8px;
+    position: relative;
+}
+
+.movie-rating-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #F6C516;
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.movie-rating-badge.high-rating {
+    border: 1px solid #F6C516;
 }
 
 .movie-title {
-    flex: 1;
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.8);
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    margin-bottom: 4px;
+    line-height: 1.3;
 }
 
 .search-field .mud-input-outlined-border {

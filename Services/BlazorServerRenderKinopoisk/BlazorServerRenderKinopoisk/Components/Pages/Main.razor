@@ -14,17 +14,13 @@
     <div class="carousel">
         @foreach (var movie in popularMovies)
         {
-            <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="ScheduleUnhover" @onmousemove="(e) => TrackMouseMove(e)" style="flex: 0 0 150px">
-                <MudCard Class="movie-card" Outlined="false">
-                    <MudCardMedia Image="@movie.PosterUrl" Height="225" />
-                    <MudCardContent Class="pa-2">
-                        <MudText Typo="Typo.body2" Class="movie-title">@movie.Title</MudText>
-                        <div class="d-flex align-center justify-space-between">
-                            <MudText Typo="Typo.caption" Color="Color.Primary">@movie.RatingText</MudText>
-                            <MudText Typo="Typo.caption" Style="opacity: 0.5">@movie.ReleaseYear</MudText>
-                        </div>
-                    </MudCardContent>
-                </MudCard>
+            <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="ScheduleUnhover" @onmousemove="(e) => TrackMouseMove(e)" class="movie-card">
+                <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
+                    <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
+                        @movie.RatingText
+                    </div>
+                </div>
+                <div class="movie-title">@movie.Title</div>
             </div>
         }
     </div>
@@ -33,17 +29,13 @@
     <div class="carousel">
         @foreach (var movie in topRatedMovies)
         {
-            <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="ScheduleUnhover" @onmousemove="(e) => TrackMouseMove(e)" style="flex: 0 0 150px">
-                <MudCard Class="movie-card" Outlined="false">
-                    <MudCardMedia Image="@movie.PosterUrl" Height="225" />
-                    <MudCardContent Class="pa-2">
-                        <MudText Typo="Typo.body2" Class="movie-title">@movie.Title</MudText>
-                        <div class="d-flex align-center justify-space-between">
-                            <MudText Typo="Typo.caption" Color="Color.Primary">@movie.RatingText</MudText>
-                            <MudText Typo="Typo.caption" Style="opacity: 0.5">@movie.ReleaseYear</MudText>
-                        </div>
-                    </MudCardContent>
-                </MudCard>
+            <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="ScheduleUnhover" @onmousemove="(e) => TrackMouseMove(e)" class="movie-card">
+                <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
+                    <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
+                        @movie.RatingText
+                    </div>
+                </div>
+                <div class="movie-title">@movie.Title</div>
             </div>
         }
     </div>
@@ -149,8 +141,8 @@
         {
             _hoverCts?.Cancel();
             _hoveredMovie = movie;
+            _ = JS.InvokeVoidAsync("setTooltipPos", _mouseX, _mouseY);
             StateHasChanged();
-            _ = JS.InvokeVoidAsync("updateTooltipPosition", _mouseX, _mouseY);
             return;
         }
 
@@ -163,11 +155,11 @@
             try
             {
                 await Task.Delay(200, cts.Token);
-                await InvokeAsync(async () =>
+                await InvokeAsync(() =>
                 {
                     _hoveredMovie = movie;
+                    _ = JS.InvokeVoidAsync("setTooltipPos", _mouseX, _mouseY);
                     StateHasChanged();
-                    await JS.InvokeVoidAsync("updateTooltipPosition", _mouseX, _mouseY);
                 });
             }
             catch (OperationCanceledException) { }

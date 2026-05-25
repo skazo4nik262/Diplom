@@ -1,6 +1,7 @@
 @implements IDisposable
+@inject IJSRuntime JS
 
-<div class="tooltip-card" id="movie-tooltip" style="background-image: url('@Movie.PosterUrl')" @onmouseenter="() => OnMouseEnter.InvokeAsync()" @onmouseleave="() => OnMouseLeave.InvokeAsync()">
+<div class="tooltip-card" id="movie-tooltip" data-poster="@Movie.PosterUrl" @onmouseenter="() => OnMouseEnter.InvokeAsync()" @onmouseleave="() => OnMouseLeave.InvokeAsync()">
     @if (_readMoreMode)
     {
         <div class="tooltip-readmore">
@@ -58,6 +59,11 @@
     {
         _readMoreMode = false;
         UpdateDisplay();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JS.InvokeVoidAsync("positionTooltip");
     }
 
     private void UpdateDisplay()
