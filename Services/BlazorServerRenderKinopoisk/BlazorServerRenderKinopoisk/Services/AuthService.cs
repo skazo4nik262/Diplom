@@ -79,6 +79,18 @@ namespace BlazorServerRenderKinopoisk.Services
             }
             catch { return null; }
         }
+
+        public async Task<List<UserBriefDto>> SearchUsersAsync(string query)
+        {
+            try
+            {
+                return await _flurl.Request("api/auth/users/search")
+                    .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                    .SetQueryParam("query", query)
+                    .GetJsonAsync<List<UserBriefDto>>();
+            }
+            catch { return []; }
+        }
     }
     public record ErrorBody(string Error);
 }

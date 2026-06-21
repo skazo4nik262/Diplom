@@ -272,6 +272,13 @@ namespace CatalogService.Services
                 .Select(u => u.Login)
                 .FirstOrDefaultAsync();
         }
+        public async Task<string?> GetUserUsernameAsync(Guid userId)
+        {
+            return await _db.Users
+                .Where(u => u.Id == userId)
+                .Select(u => u.Username)
+                .FirstOrDefaultAsync();
+        }
         public async Task AddPlaylistAsync(Guid userId, string name, string? description, IEnumerable<int> tmdbIds)
         {
             var playlist = new UserPlaylistEntity
@@ -641,6 +648,10 @@ namespace CatalogService.Services
             if (entry is not null)
             {
                 entry.Status = status;
+                if (status == "watched")
+                    entry.WatchedAt ??= DateTime.UtcNow;
+                else if (status != "watched")
+                    entry.WatchedAt = null;
             }
             else
             {
@@ -649,6 +660,7 @@ namespace CatalogService.Services
                     UserId = userId,
                     MovieId = tmdbId,
                     Status = status,
+                    WatchedAt = status == "watched" ? DateTime.UtcNow : null,
                     CreatedAt = DateTime.UtcNow
                 });
             }
@@ -856,6 +868,11 @@ namespace CatalogService.Services
             return await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
         }
 
+        public async Task<List<UserEntity>> GetUserBatchAsync(IEnumerable<Guid> userIds)
+        {
+            return await _db.Users.Where(u => userIds.Contains(u.Id)).ToListAsync();
+        }
+
         public async Task<List<ReviewEntity>> GetUserReviewsAsync(Guid userId, int page = 1)
         {
             return await _db.Reviews
@@ -944,6 +961,175 @@ namespace CatalogService.Services
                 .FirstOrDefaultAsync(l => l.ReviewId == reviewId && l.UserId == userId);
             return like?.IsPositive;
         }
+
+        #region Friends
+        public async Task FollowUserAsync(Guid userId, Guid targetUserId)
+        {
+            if (userId == targetUserId) return;
+            var exists = await _db.UserFollows.AnyAsync(f => f.UserId == userId && f.FollowedUserId == targetUserId);
+            if (exists) return;
+            _db.UserFollows.Add(new UserFollowEntity
+            {
+                UserId = userId,
+                FollowedUserId = targetUserId,
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task UnfollowUserAsync(Guid userId, Guid targetUserId)
+        {
+            var follow = await _db.UserFollows.FirstOrDefaultAsync(f => f.UserId == userId && f.FollowedUserId == targetUserId);
+            if (follow is not null)
+            {
+                _db.UserFollows.Remove(follow);
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task<bool> IsFollowingAsync(Guid userId, Guid targetUserId)
+        {
+            return await _db.UserFollows.AnyAsync(f => f.UserId == userId && f.FollowedUserId == targetUserId);
+        }
+
+        public async Task<List<Guid>> GetFollowingIdsAsync(Guid userId)
+        {
+            return await _db.UserFollows
+                .Where(f => f.UserId == userId)
+                .OrderByDescending(f => f.CreatedAt)
+                .Select(f => f.FollowedUserId)
+                .ToListAsync();
+        }
+
+        public async Task<List<Guid>> GetFollowerIdsAsync(Guid userId)
+        {
+            return await _db.UserFollows
+                .Where(f => f.FollowedUserId == userId)
+                .OrderByDescending(f => f.CreatedAt)
+                .Select(f => f.UserId)
+                .ToListAsync();
+        }
+
+        public async Task<int> GetFollowingCountAsync(Guid userId)
+        {
+            return await _db.UserFollows.CountAsync(f => f.UserId == userId);
+        }
+
+        public async Task<int> GetFollowerCountAsync(Guid userId)
+        {
+            return await _db.UserFollows.CountAsync(f => f.FollowedUserId == userId);
+        }
+        #endregion
+
+        #region Activity
+        public async Task<List<ActivityEventEntity>> GetFeedAsync(Guid userId, int page = 1, int pageSize = 20)
+        {
+            var followingIds = await GetFollowingIdsAsync(userId);
+            var userIds = followingIds.Append(userId).ToList();
+
+            return await _db.ActivityEvents
+                .Include(e => e.User)
+                .Include(e => e.Movie)
+                .Where(e => userIds.Contains(e.UserId))
+                .OrderByDescending(e => e.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+
+        public async Task RecordActivityAsync(Guid userId, string eventType, int? movieId = null, string? reviewId = null, int? playlistId = null)
+        {
+            _db.ActivityEvents.Add(new ActivityEventEntity
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                EventType = eventType,
+                MovieId = movieId,
+                ReviewId = reviewId,
+                PlaylistId = playlistId,
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+        }
+        #endregion
+
+        #region Notifications
+        public async Task<List<NotificationEntity>> GetNotificationsAsync(Guid userId, bool? unreadOnly = null, int page = 1, int pageSize = 20)
+        {
+            var query = _db.Notifications
+                .Include(n => n.Movie)
+                .Where(n => n.UserId == userId);
+
+            if (unreadOnly == true)
+                query = query.Where(n => !n.IsRead);
+
+            return await query
+                .OrderByDescending(n => n.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+
+        public async Task<int> GetUnreadNotificationCountAsync(Guid userId)
+        {
+            return await _db.Notifications.CountAsync(n => n.UserId == userId && !n.IsRead);
+        }
+
+        public async Task MarkNotificationReadAsync(Guid notificationId)
+        {
+            var notif = await _db.Notifications.FindAsync(notificationId);
+            if (notif is not null)
+            {
+                notif.IsRead = true;
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task MarkAllNotificationsReadAsync(Guid userId)
+        {
+            await _db.Notifications
+                .Where(n => n.UserId == userId && !n.IsRead)
+                .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
+        }
+
+        public async Task CreateNotificationAsync(Guid userId, Guid actorId, string eventType, int? movieId = null, string? reviewId = null, int? playlistId = null)
+        {
+            _db.Notifications.Add(new NotificationEntity
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                ActorId = actorId,
+                EventType = eventType,
+                MovieId = movieId,
+                ReviewId = reviewId,
+                PlaylistId = playlistId,
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+        }
+        #endregion
+
+        #region Diary
+        public async Task<List<UserMovieEntity>> GetDiaryAsync(Guid userId, int? year = null, int? month = null, int page = 1, int pageSize = 20)
+        {
+            var query = _db.UserMovies
+                .Include(u => u.Movie).ThenInclude(m => m.Genres)
+                .Where(u => u.UserId == userId && u.WatchedAt != null);
+
+            if (year.HasValue)
+                query = query.Where(u => u.WatchedAt!.Value.Year == year.Value);
+
+            if (month.HasValue)
+                query = query.Where(u => u.WatchedAt!.Value.Month == month.Value);
+
+            return await query
+                .OrderByDescending(u => u.WatchedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+        #endregion
     }
 
     public record EmbeddingGenerationResult(int Total, int Processed, int Errors);

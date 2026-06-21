@@ -70,6 +70,15 @@ namespace IdentityService.Controllers
             ));
         }
 
+        [HttpGet("users/search")]
+        public async Task<ActionResult<List<UserResponse>>> SearchUsers([FromQuery] string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+                return Ok(new List<UserResponse>());
+            var users = await _identityService.SearchUsersAsync(query);
+            return Ok(users.Select(u => new UserResponse(u.Id, u.Login, u.Username, u.Role)).ToList());
+        }
+
         [HttpGet("users/{login}")]
         public async Task<ActionResult<UserResponse>> GetUser(string login)
         {

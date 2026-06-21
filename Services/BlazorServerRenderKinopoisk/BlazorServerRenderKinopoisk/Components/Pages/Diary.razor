@@ -1,0 +1,119 @@
+@page "/diary"
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject NavigationManager Navigation
+
+<div class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h5">Дневник просмотров</MudText>
+        <div class="d-flex align-center gap-4">
+            <MudSelect T="int" Label="Год" Variant="Variant.Outlined" @bind-Value="_selectedYear"
+                       @bind-Value:after="LoadDiary" Style="width: 120px">
+                <MudSelectItem T="int" Value="0">Все</MudSelectItem>
+                @foreach (var y in _years)
+                {
+                    <MudSelectItem T="int" Value="@y">@y</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="int" Label="Месяц" Variant="Variant.Outlined" @bind-Value="_selectedMonth"
+                       @bind-Value:after="LoadDiary" Style="width: 140px">
+                <MudSelectItem T="int" Value="0">Все</MudSelectItem>
+                @foreach (var m in _months)
+                {
+                    <MudSelectItem T="int" Value="@m.Key">@m.Value</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="d-flex justify-center mt-16"><MudProgressCircular Indeterminate Size="Size.Large" /></div>
+    }
+    else if (_entries.Count == 0)
+    {
+        <div class="d-flex justify-center mt-16"><MudText Typo="Typo.h6" Style="opacity: 0.5">Записи не найдены</MudText></div>
+    }
+    else
+    {
+        <div class="diary-list">
+            @foreach (var entry in _entries)
+            {
+                <div class="diary-entry" @onclick="() => GoToMovie(entry.MovieId)">
+                    <div class="diary-poster">
+                        @if (!string.IsNullOrEmpty(entry.Movie?.PosterUrl))
+                        {
+                            <img src="@entry.Movie.PosterUrl" alt="@entry.Movie.Title" />
+                        }
+                    </div>
+                    <div class="diary-info">
+                        <div class="diary-title">@entry.Movie?.Title</div>
+                        <div class="diary-meta">
+                            <span>@(entry.WatchedAt?.ToString("dd MMM yyyy"))</span>
+                            @if (entry.Rating.HasValue)
+                            {
+                                <span class="diary-rating">@entry.Rating.Value/10</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        @if (_hasMore)
+        {
+            <div class="d-flex justify-center mt-4">
+                <MudButton Variant="Variant.Outlined" @onclick="LoadMore" Disabled="_loadingMore">
+                    @(_loadingMore ? "Загрузка..." : "Загрузить ещё")
+                </MudButton>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private bool _loadingMore;
+    private int _page = 1;
+    private bool _hasMore = true;
+    private int _selectedYear;
+    private int _selectedMonth;
+    private List<DiaryEntryDto> _entries = [];
+
+    private readonly List<int> _years = Enumerable.Range(2020, DateTime.UtcNow.Year - 2020 + 1).Reverse().ToList();
+    private readonly List<KeyValuePair<int, string>> _months =
+    [
+        new(1, "Январь"), new(2, "Февраль"), new(3, "Март"), new(4, "Апрель"),
+        new(5, "Май"), new(6, "Июнь"), new(7, "Июль"), new(8, "Август"),
+        new(9, "Сентябрь"), new(10, "Октябрь"), new(11, "Ноябрь"), new(12, "Декабрь")
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDiary();
+    }
+
+    private async Task LoadDiary()
+    {
+        _loading = true;
+        _page = 1;
+        _entries = await Catalog.GetDiaryAsync(
+            _selectedYear > 0 ? _selectedYear : null,
+            _selectedMonth > 0 ? _selectedMonth : null, _page);
+        _hasMore = _entries.Count == 20;
+        _loading = false;
+    }
+
+    private async Task LoadMore()
+    {
+        _loadingMore = true;
+        _page++;
+        var more = await Catalog.GetDiaryAsync(
+            _selectedYear > 0 ? _selectedYear : null,
+            _selectedMonth > 0 ? _selectedMonth : null, _page);
+        _entries.AddRange(more);
+        _hasMore = more.Count == 20;
+        _loadingMore = false;
+    }
+
+    private void GoToMovie(int movieId) => Navigation.NavigateTo($"/movie/{movieId}");
+}

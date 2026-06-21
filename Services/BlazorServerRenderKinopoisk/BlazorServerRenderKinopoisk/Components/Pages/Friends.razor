@@ -1,0 +1,157 @@
+@page "/friends"
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<div class="mt-4">
+    <MudText Typo="Typo.h5" Class="mb-4">Друзья</MudText>
+
+    <div class="mb-4">
+        <MudTextField @bind-Value="_searchQuery" Placeholder="Поиск пользователей..."
+                      Variant="Variant.Outlined" Immediate="true"
+                      @bind-Value:after="SearchUsers" Class="mb-2" />
+        @if (_searchResults.Count > 0)
+        {
+            <div class="friends-grid">
+                @foreach (var user in _searchResults)
+                {
+                    <div class="friend-card" @onclick="() => GoToUser(user.Id)">
+                        <div class="friend-avatar">@GetInitials(user)</div>
+                        <div class="friend-name">@user.DisplayName</div>
+                        <MudText Typo="Typo.caption" Style="opacity: 0.5">@user.Login</MudText>
+                        @if (user.Id != _myId)
+                        {
+                            <span @onclick:stopPropagation>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                           @onclick="() => ToggleFollowSearch(user)">
+                                    @(_followingIds.Contains(user.Id) ? "✓" : "+")
+                                </MudButton>
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <MudTabs @bind-ActivePanelIndex="_activeTab">
+        <MudTabPanel Text="Подписки">
+            @if (_loadingFollowing)
+            {
+                <div class="d-flex justify-center mt-16"><MudProgressCircular Indeterminate Size="Size.Large" /></div>
+            }
+            else if (_following.Count == 0)
+            {
+                <div class="d-flex justify-center mt-16"><MudText Typo="Typo.h6" Style="opacity: 0.5">Вы ни на кого не подписаны</MudText></div>
+            }
+            else
+            {
+                <div class="friends-grid">
+                    @foreach (var user in _following)
+                    {
+                        <div class="friend-card" @onclick="() => GoToUser(user.Id)">
+                            <div class="friend-avatar">@GetInitials(user)</div>
+                            <div class="friend-name">@user.DisplayName</div>
+                            <MudIconButton Icon="@Icons.Material.Filled.PersonRemove" Size="Size.Small"
+                                           Color="Color.Error"
+                                           @onclick="() => Unfollow(user.Id)" />
+                        </div>
+                    }
+                </div>
+            }
+        </MudTabPanel>
+        <MudTabPanel Text="Подписчики">
+            @if (_loadingFollowers)
+            {
+                <div class="d-flex justify-center mt-16"><MudProgressCircular Indeterminate Size="Size.Large" /></div>
+            }
+            else if (_followers.Count == 0)
+            {
+                <div class="d-flex justify-center mt-16"><MudText Typo="Typo.h6" Style="opacity: 0.5">На вас никто не подписан</MudText></div>
+            }
+            else
+            {
+                <div class="friends-grid">
+                    @foreach (var user in _followers)
+                    {
+                        <div class="friend-card" @onclick="() => GoToUser(user.Id)">
+                            <div class="friend-avatar">@GetInitials(user)</div>
+                            <div class="friend-name">@user.DisplayName</div>
+                        </div>
+                    }
+                </div>
+            }
+        </MudTabPanel>
+    </MudTabs>
+</div>
+
+@code {
+    private int _activeTab;
+    private bool _loadingFollowing = true;
+    private bool _loadingFollowers = true;
+    private List<UserBriefDto> _following = [];
+    private List<UserBriefDto> _followers = [];
+    private List<UserBriefDto> _searchResults = [];
+    private HashSet<Guid> _followingIds = [];
+    private string? _searchQuery;
+    private Guid _myId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        var profile = await AuthService.GetProfileAsync();
+        _myId = profile?.Id ?? Guid.Empty;
+
+        _following = await Catalog.GetFollowingAsync();
+        _followingIds = _following.Select(u => u.Id).ToHashSet();
+        _loadingFollowing = false;
+
+        _followers = await Catalog.GetFollowersAsync();
+        _loadingFollowers = false;
+    }
+
+    private async Task SearchUsers()
+    {
+        if (string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            _searchResults = [];
+            return;
+        }
+        _searchResults = await AuthService.SearchUsersAsync(_searchQuery);
+        StateHasChanged();
+    }
+
+    private async Task ToggleFollowSearch(UserBriefDto user)
+    {
+        if (_followingIds.Contains(user.Id))
+        {
+            await Catalog.UnfollowUserAsync(user.Id);
+            _followingIds.Remove(user.Id);
+        }
+        else
+        {
+            await Catalog.FollowUserAsync(user.Id);
+            _followingIds.Add(user.Id);
+        }
+    }
+
+    private async Task Unfollow(Guid userId)
+    {
+        await Catalog.UnfollowUserAsync(userId);
+        _following.RemoveAll(u => u.Id == userId);
+        _followingIds.Remove(userId);
+    }
+
+    private static string GetInitials(UserBriefDto user)
+    {
+        var name = user.DisplayName;
+        return name.Length > 0 ? name[..1].ToUpper() : "?";
+    }
+
+    private void GoToUser(Guid userId) => Navigation.NavigateTo($"/user/{userId}");
+}

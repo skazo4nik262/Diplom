@@ -32,6 +32,9 @@ public class TmdbDbContext : DbContext
     public DbSet<UserPlaylistItemEntity> UserPlaylistItems => Set<UserPlaylistItemEntity>();
     public DbSet<MovieEmbeddingEntity> MovieEmbeddings => Set<MovieEmbeddingEntity>();
     public DbSet<UserTasteEntity> UserTaste => Set<UserTasteEntity>();
+    public DbSet<UserFollowEntity> UserFollows => Set<UserFollowEntity>();
+    public DbSet<ActivityEventEntity> ActivityEvents => Set<ActivityEventEntity>();
+    public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -435,6 +438,36 @@ public class TmdbDbContext : DbContext
             entity.HasKey(e => e.UserId);
             entity.Property(e => e.Embedding);
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserFollowEntity>(entity =>
+        {
+            entity.ToTable("UserFollows");
+            entity.HasKey(e => new { e.UserId, e.FollowedUserId });
+            entity.HasOne(e => e.User).WithMany(u => u.Following).HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.FollowedUser).WithMany(u => u.Followers).HasForeignKey(e => e.FollowedUserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ActivityEventEntity>(entity =>
+        {
+            entity.ToTable("ActivityEvents");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EventType).HasMaxLength(100);
+            entity.HasOne(e => e.User).WithMany(u => u.ActivityEvents).HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.MovieId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.CreatedAt);
+        });
+
+        modelBuilder.Entity<NotificationEntity>(entity =>
+        {
+            entity.ToTable("Notifications");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EventType).HasMaxLength(100);
+            entity.HasOne(e => e.User).WithMany(u => u.Notifications).HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.MovieId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => new { e.UserId, e.IsRead });
         });
     }
 }

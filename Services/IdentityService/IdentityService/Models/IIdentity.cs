@@ -11,5 +11,6 @@ namespace IdentityService.Models
         Task<string?> GenerateTokenAsync(string login, string password);
         Task<bool> DeactivateAsync(Guid id);
         Task<User?> UpdateProfileAsync(Guid id, string? username, string? bio, DateTime? birthday, string? avatarUrl);
+        Task<List<User>> SearchUsersAsync(string query);
     }
 }

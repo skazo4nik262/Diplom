@@ -1,6 +1,7 @@
 @page "/user/{UserId:guid}"
 @rendermode InteractiveServer
 @inject CatalogService Catalog
+@inject AuthService AuthService
 @inject TokenStore TokenStore
 @inject NavigationManager Navigation
 
@@ -27,7 +28,16 @@
                 }
             </div>
             <div>
-                <MudText Typo="Typo.h4">@(_profile.Username ?? _profile.Login)</MudText>
+                <div class="d-flex align-center gap-4">
+                    <MudText Typo="Typo.h4">@(_profile.Username ?? _profile.Login)</MudText>
+                    @if (!_isOwnProfile)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                   @onclick="ToggleFollow" Disabled="_followLoading">
+                            @(_followStatus?.IsFollowing == true ? "Отписаться" : "Подписаться")
+                        </MudButton>
+                    }
+                </div>
                 @if (!string.IsNullOrEmpty(_profile.Bio))
                 {
                     <MudText Typo="Typo.body2" Style="opacity: 0.7">@_profile.Bio</MudText>
@@ -44,6 +54,25 @@
                 </div>
             </div>
         </div>
+
+        @if (_comparison is not null && !_isOwnProfile)
+        {
+            <MudText Typo="Typo.h5" Class="mt-6 mb-2">Сравнение вкусов</MudText>
+            <div class="taste-comparison">
+                <div class="comparison-stat">
+                    <span class="comparison-value">@_comparison.CommonMovies</span>
+                    <span class="comparison-label">общих фильмов</span>
+                </div>
+                <div class="comparison-stat">
+                    <span class="comparison-value">@_comparison.OverlapPercent%</span>
+                    <span class="comparison-label">совпадение</span>
+                </div>
+                <div class="comparison-stat">
+                    <span class="comparison-value">@_comparison.AverageRatingDifference</span>
+                    <span class="comparison-label">разница в оценках</span>
+                </div>
+            </div>
+        }
 
         @if (_profile.Reviews?.Count > 0)
         {
@@ -73,6 +102,11 @@
 
     private UserProfileDto? _profile;
     private bool _loading = true;
+    private bool _isOwnProfile;
+    private bool _followLoading;
+    private FollowStatusDto? _followStatus;
+    private TasteComparisonDto? _comparison;
+    private Guid _currentUserId;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -85,9 +119,29 @@
             return;
         }
 
+        var currentUser = await AuthService.GetProfileAsync();
+        _currentUserId = currentUser?.Id ?? Guid.Empty;
+        _isOwnProfile = _currentUserId == UserId;
+
         _profile = await Catalog.GetUserProfileAsync(UserId);
+        if (!_isOwnProfile)
+        {
+            _followStatus = await Catalog.GetFollowStatusAsync(UserId);
+            _comparison = await Catalog.CompareWithUserAsync(_currentUserId, UserId);
+        }
         _loading = false;
         StateHasChanged();
+    }
+
+    private async Task ToggleFollow()
+    {
+        _followLoading = true;
+        if (_followStatus?.IsFollowing == true)
+            await Catalog.UnfollowUserAsync(UserId);
+        else
+            await Catalog.FollowUserAsync(UserId);
+        _followStatus = await Catalog.GetFollowStatusAsync(UserId);
+        _followLoading = false;
     }
 
     private void GoToMovie(int movieId) => Navigation.NavigateTo($"/movie/{movieId}");

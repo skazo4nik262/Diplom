@@ -15,4 +15,8 @@ public class UserEntity
 
     public ICollection<UserMovieEntity> UserMovies { get; set; } = new List<UserMovieEntity>();
     public ICollection<UserPlaylistEntity> Playlists { get; set; } = new List<UserPlaylistEntity>();
+    public ICollection<UserFollowEntity> Followers { get; set; } = new List<UserFollowEntity>();
+    public ICollection<UserFollowEntity> Following { get; set; } = new List<UserFollowEntity>();
+    public ICollection<NotificationEntity> Notifications { get; set; } = new List<NotificationEntity>();
+    public ICollection<ActivityEventEntity> ActivityEvents { get; set; } = new List<ActivityEventEntity>();
 }

@@ -73,4 +73,41 @@ public class UsersController : ControllerBase
             TopGenres = genreCounts
         });
     }
+
+    [HttpGet("{userId:guid}/compare/{otherUserId:guid}")]
+    public async Task<IActionResult> Compare(Guid userId, Guid otherUserId)
+    {
+        var userMovies = await _postgres.GetUserMoviesAllAsync(userId);
+        var otherMovies = await _postgres.GetUserMoviesAllAsync(otherUserId);
+
+        var userMovieIds = userMovies.Select(m => m.MovieId).ToHashSet();
+        var otherMovieIds = otherMovies.Select(m => m.MovieId).ToHashSet();
+
+        var common = userMovieIds.Intersect(otherMovieIds).ToList();
+        var commonWithRatings = common
+            .Select(id => (
+                MovieId: id,
+                UserRating: userMovies.First(m => m.MovieId == id).Rating,
+                OtherRating: otherMovies.First(m => m.MovieId == id).Rating
+            ))
+            .Where(x => x.UserRating.HasValue && x.OtherRating.HasValue)
+            .ToList();
+
+        var totalCommon = common.Count;
+        var bothRatedCount = commonWithRatings.Count;
+        var avgDiff = bothRatedCount > 0
+            ? Math.Round(commonWithRatings.Average(x => Math.Abs((double)(x.UserRating!.Value - x.OtherRating!.Value))), 1)
+            : 0;
+
+        return Ok(new
+        {
+            TotalMoviesUser = userMovies.Count,
+            TotalMoviesOther = otherMovies.Count,
+            CommonMovies = totalCommon,
+            BothRated = bothRatedCount,
+            AverageRatingDifference = avgDiff,
+            OverlapPercent = userMovies.Count > 0
+                ? Math.Round((double)totalCommon / userMovies.Count * 100, 1) : 0
+        });
+    }
 }

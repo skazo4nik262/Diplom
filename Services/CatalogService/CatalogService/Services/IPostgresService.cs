@@ -52,6 +52,7 @@ namespace CatalogService.Services
         Task<ReviewEntity?> GetUserMovieReviewAsync(Guid userId, int tmdbId);
         Task UpdateReviewAsync(ReviewEntity review);
         Task<string?> GetUserLoginAsync(Guid userId);
+        Task<string?> GetUserUsernameAsync(Guid userId);
         Task AddReviewCommentAsync(string reviewId, Guid userId, string authorName, string content);
         Task AddOrUpdateReviewLikeAsync(string reviewId, Guid userId, bool isPositive);
         #endregion
@@ -79,6 +80,7 @@ namespace CatalogService.Services
 
         #region Queries
         Task<UserEntity?> GetUserByIdAsync(Guid userId);
+        Task<List<UserEntity>> GetUserBatchAsync(IEnumerable<Guid> userIds);
         Task<List<ReviewEntity>> GetUserReviewsAsync(Guid userId, int page = 1);
         Task<List<UserMovieEntity>> GetUserMoviesAllAsync(Guid userId);
         Task<List<ReviewCommentEntity>> GetReviewCommentsAsync(string reviewId);
@@ -89,6 +91,33 @@ namespace CatalogService.Services
         #region Embeddings
         Task EnsureEmbeddingsAsync(int tmdbId);
         Task<EmbeddingGenerationResult> RebuildAllEmbeddingsAsync();
+        #endregion
+
+        #region Friends
+        Task FollowUserAsync(Guid userId, Guid targetUserId);
+        Task UnfollowUserAsync(Guid userId, Guid targetUserId);
+        Task<bool> IsFollowingAsync(Guid userId, Guid targetUserId);
+        Task<List<Guid>> GetFollowingIdsAsync(Guid userId);
+        Task<List<Guid>> GetFollowerIdsAsync(Guid userId);
+        Task<int> GetFollowingCountAsync(Guid userId);
+        Task<int> GetFollowerCountAsync(Guid userId);
+        #endregion
+
+        #region Activity
+        Task<List<ActivityEventEntity>> GetFeedAsync(Guid userId, int page = 1, int pageSize = 20);
+        Task RecordActivityAsync(Guid userId, string eventType, int? movieId = null, string? reviewId = null, int? playlistId = null);
+        #endregion
+
+        #region Notifications
+        Task<List<NotificationEntity>> GetNotificationsAsync(Guid userId, bool? unreadOnly = null, int page = 1, int pageSize = 20);
+        Task<int> GetUnreadNotificationCountAsync(Guid userId);
+        Task MarkNotificationReadAsync(Guid notificationId);
+        Task MarkAllNotificationsReadAsync(Guid userId);
+        Task CreateNotificationAsync(Guid userId, Guid actorId, string eventType, int? movieId = null, string? reviewId = null, int? playlistId = null);
+        #endregion
+
+        #region Diary
+        Task<List<UserMovieEntity>> GetDiaryAsync(Guid userId, int? year = null, int? month = null, int page = 1, int pageSize = 20);
         #endregion
     }
 }

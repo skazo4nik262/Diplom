@@ -91,5 +91,16 @@ namespace IdentityService.Models
 
             return _tokenService.GenerateToken(user);
         }
+
+        public async Task<List<User>> SearchUsersAsync(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return [];
+            var lower = query.ToLower();
+            return await _db.Users
+                .AsNoTracking()
+                .Where(u => u.IsActive && (u.Login.ToLower().Contains(lower) || u.Username!.ToLower().Contains(lower)))
+                .Take(20)
+                .ToListAsync();
+        }
     }
 }

@@ -1,5 +1,6 @@
 @inject TokenStore TokenStore
 @inject AuthService AuthService
+@inject CatalogService Catalog
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 
@@ -24,6 +25,56 @@
                   AdornmentColor="Color.Primary"
                   OnKeyDown="@HandleSearchKeyDown"
                   Class="search-field" />
+    <MudMenu Class="notif-menu" Style="margin-right: 4px;">
+        <ActivatorContent>
+            <MudIconButton Icon="@Icons.Material.Filled.Notifications"
+                           Size="@Size.Large" Color="@Color.Primary"
+                           @onclick="@context.ToggleAsync" />
+        </ActivatorContent>
+        <ChildContent>
+            <div style="padding: 8px 16px; display: flex; align-items: center; gap: 8px;">
+                <MudText Typo="Typo.body2" Color="Color.Primary">Уведомления</MudText>
+                @if (_unreadCount > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">@_unreadCount</MudChip>
+                }
+            </div>
+            <MudDivider />
+            @if (_notifications.Count == 0)
+            {
+                <MudText Class="px-4 py-2" Typo="Typo.body2" Style="opacity: 0.5; min-width: 250px;">
+                    Нет уведомлений
+                </MudText>
+            }
+            else
+            {
+                @foreach (var n in _notifications.Take(10))
+                {
+                    <MudMenuItem OnClick="() => MarkRead(n.Id)">
+                        <div style="opacity: @(n.IsRead ? 0.5 : 1); white-space: normal; max-width: 280px;">
+                            <MudText Typo="Typo.body2">@n.EventText</MudText>
+                            @if (n.Movie is not null)
+                            {
+                                <MudText Typo="Typo.caption">@n.Movie.Title</MudText>
+                            }
+                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 0.7rem;">
+                                @n.CreatedAt.ToString("dd MMM HH:mm")
+                            </MudText>
+                        </div>
+                    </MudMenuItem>
+                }
+                @if (_unreadCount > 0)
+                {
+                    <MudDivider />
+                    <MudMenuItem OnClick="MarkAllRead">
+                        <MudText Typo="Typo.body2" Color="Color.Primary">
+                            Прочитать все (@_unreadCount)
+                        </MudText>
+                    </MudMenuItem>
+                }
+            }
+        </ChildContent>
+    </MudMenu>
     <MudMenu Class="account-menu">
         <ActivatorContent>
             <MudIconButton Icon="@Icons.Material.Filled.AccountCircle"
@@ -42,6 +93,8 @@
             <MudMenuItem OnClick="@ShowProfile">Профиль</MudMenuItem>
             <MudMenuItem OnClick="@ShowEditProfile">Редактировать профиль</MudMenuItem>
             <MudMenuItem OnClick="@ShowPlaylists">Плейлисты</MudMenuItem>
+            <MudMenuItem OnClick="@ShowFriends">Друзья</MudMenuItem>
+            <MudMenuItem OnClick="@ShowDiary">Дневник</MudMenuItem>
             <MudDivider />
             <MudMenuItem OnClick="@LogoutAsync">
                 <MudIcon Icon="@Icons.Material.Filled.Logout" Size="@Size.Small" Class="mr-1" />
@@ -54,11 +107,16 @@
 @code {
     private string? _searchQuery;
     private ProfileResponse? _profile;
+    private int _unreadCount;
+    private List<NotificationItemDto> _notifications = [];
+    private PeriodicTimer? _timer;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
         await LoadProfile();
+        await LoadNotifications();
+        StartPolling();
     }
 
     private async Task LoadProfile()
@@ -71,17 +129,45 @@
         }
     }
 
-    private void GoHome()
+    private async Task LoadNotifications()
     {
-        Navigation.NavigateTo("/main");
+        var result = await Catalog.GetNotificationsAsync(unreadOnly: true);
+        _unreadCount = result.UnreadCount;
+        _notifications = result.Items;
+        StateHasChanged();
     }
 
+    private async void StartPolling()
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        while (await _timer.WaitForNextTickAsync())
+        {
+            await LoadNotifications();
+        }
+    }
+
+    private void GoHome() => Navigation.NavigateTo("/main");
     private void ShowProfile() => Navigation.NavigateTo("/profile");
     private void ShowEditProfile() => Navigation.NavigateTo("/profile/edit");
     private void ShowPlaylists() => Navigation.NavigateTo("/playlists");
+    private void ShowFriends() => Navigation.NavigateTo("/friends");
+    private void ShowDiary() => Navigation.NavigateTo("/diary");
+
+    private async Task MarkRead(Guid id)
+    {
+        await Catalog.MarkNotificationReadAsync(id);
+        await LoadNotifications();
+    }
+
+    private async Task MarkAllRead()
+    {
+        await Catalog.MarkAllNotificationsReadAsync();
+        await LoadNotifications();
+    }
 
     private async Task LogoutAsync()
     {
+        _timer?.Dispose();
         await TokenStore.ClearAsync();
         _profile = null;
         Navigation.NavigateTo("/login");

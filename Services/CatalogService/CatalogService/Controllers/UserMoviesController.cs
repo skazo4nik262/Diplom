@@ -48,6 +48,7 @@ public class UserMoviesController : ControllerBase
         if (userId == Guid.Empty) return Unauthorized();
 
         await _postgres.RateMovieAsync(userId, tmdbId, request.Rating);
+        await _postgres.RecordActivityAsync(userId, "movie_rated", tmdbId);
         return Ok();
     }
 
@@ -58,6 +59,16 @@ public class UserMoviesController : ControllerBase
         if (userId == Guid.Empty) return Unauthorized();
 
         await _postgres.SetMovieStatusAsync(userId, tmdbId, request.Status);
+        var eventType = request.Status switch
+        {
+            "watching" => "movie_watching",
+            "watched" => "movie_watched",
+            "planned" => "movie_planned",
+            "dropped" => "movie_dropped",
+            _ => (string?)null
+        };
+        if (eventType is not null)
+            await _postgres.RecordActivityAsync(userId, eventType, tmdbId);
         return Ok();
     }
 
@@ -95,6 +106,7 @@ public class UserMoviesController : ControllerBase
         if (userId == Guid.Empty) return Unauthorized();
 
         await _postgres.SetMovieStatusAsync(userId, tmdbId, "favorite");
+        await _postgres.RecordActivityAsync(userId, "favorite_added", tmdbId);
         return Ok();
     }
 

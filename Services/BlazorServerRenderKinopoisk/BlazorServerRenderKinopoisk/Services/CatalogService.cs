@@ -672,4 +672,157 @@ public class CatalogService
         }
         catch { return []; }
     }
+
+    #region Friends
+    public async Task<bool> FollowUserAsync(Guid targetUserId)
+    {
+        try
+        {
+            await _flurl.Request($"api/catalog/friends/{targetUserId}/follow")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PostAsync();
+            return true;
+        }
+        catch { return false; }
+    }
+
+    public async Task<bool> UnfollowUserAsync(Guid targetUserId)
+    {
+        try
+        {
+            await _flurl.Request($"api/catalog/friends/{targetUserId}/unfollow")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .DeleteAsync();
+            return true;
+        }
+        catch { return false; }
+    }
+
+    public async Task<List<UserBriefDto>> GetFollowingAsync()
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/friends/following")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<List<UserBriefDto>>();
+        }
+        catch { return []; }
+    }
+
+    public async Task<List<UserBriefDto>> GetFollowersAsync()
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/friends/followers")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<List<UserBriefDto>>();
+        }
+        catch { return []; }
+    }
+
+    public async Task<FollowStatusDto?> GetFollowStatusAsync(Guid targetUserId)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/friends/{targetUserId}/status")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<FollowStatusDto>();
+        }
+        catch { return null; }
+    }
+    #endregion
+
+    #region Activity
+    public async Task<List<ActivityEventDto>> GetFeedAsync(int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/activity")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("page", page)
+                .GetJsonAsync<List<ActivityEventDto>>();
+        }
+        catch { return []; }
+    }
+    #endregion
+
+    #region Notifications
+    public async Task<NotificationListDto> GetNotificationsAsync(bool? unreadOnly = null, int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/notifications")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("unreadOnly", unreadOnly)
+                .SetQueryParam("page", page)
+                .GetJsonAsync<NotificationListDto>();
+        }
+        catch { return new NotificationListDto(); }
+    }
+
+    public async Task<bool> MarkNotificationReadAsync(Guid notificationId)
+    {
+        try
+        {
+            await _flurl.Request($"api/catalog/notifications/{notificationId}/read")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PostAsync();
+            return true;
+        }
+        catch { return false; }
+    }
+
+    public async Task<bool> MarkAllNotificationsReadAsync()
+    {
+        try
+        {
+            await _flurl.Request("api/catalog/notifications/read-all")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PostAsync();
+            return true;
+        }
+        catch { return false; }
+    }
+    #endregion
+
+    #region Diary
+    public async Task<List<DiaryEntryDto>> GetDiaryAsync(int? year = null, int? month = null, int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/diary")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("year", year)
+                .SetQueryParam("month", month)
+                .SetQueryParam("page", page)
+                .GetJsonAsync<List<DiaryEntryDto>>();
+        }
+        catch { return []; }
+    }
+
+    public async Task<bool> AddDiaryEntryAsync(int movieId, DateTime? watchedAt, int rating)
+    {
+        try
+        {
+            await _flurl.Request("api/catalog/diary")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PostJsonAsync(new { movieId, watchedAt, rating });
+            return true;
+        }
+        catch { return false; }
+    }
+    #endregion
+
+    #region Taste comparison
+    public async Task<TasteComparisonDto?> CompareWithUserAsync(Guid userId, Guid otherUserId)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/users/{userId}/compare/{otherUserId}")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<TasteComparisonDto>();
+        }
+        catch { return null; }
+    }
+    #endregion
 }

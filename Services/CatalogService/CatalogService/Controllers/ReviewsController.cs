@@ -56,7 +56,7 @@ public class ReviewsController : ControllerBase
             return Ok(existing);
         }
 
-        var login = await _postgres.GetUserLoginAsync(userId);
+        var login = await _postgres.GetUserUsernameAsync(userId);
         var review = new ReviewEntity
         {
             Id = Guid.NewGuid().ToString(),
@@ -69,6 +69,7 @@ public class ReviewsController : ControllerBase
         };
 
         await _postgres.AddReviewAsync(userId, tmdbId, review);
+        await _postgres.RecordActivityAsync(userId, "review_written", tmdbId, review.Id);
         return Ok(review);
     }
 
@@ -95,6 +96,12 @@ public class ReviewsController : ControllerBase
         var user = await _postgres.GetUserByIdAsync(userId);
         var authorName = (user?.Username ?? user?.Login) ?? "User";
         await _postgres.AddReviewCommentAsync(reviewId, userId, authorName, request.Content);
+        await _postgres.RecordActivityAsync(userId, "comment_added", tmdbId, reviewId);
+        // notify review author
+        var reviews = await _postgres.GetMovieReviewsAsync(tmdbId);
+        var review = reviews.FirstOrDefault(r => r.Id == reviewId);
+        if (review?.UserId.HasValue == true && review.UserId.Value != userId)
+            await _postgres.CreateNotificationAsync(review.UserId.Value, userId, "comment_added", tmdbId, reviewId);
         var comments = await _postgres.GetReviewCommentsAsync(reviewId);
         return Ok(comments);
     }
@@ -115,6 +122,12 @@ public class ReviewsController : ControllerBase
         if (userId == Guid.Empty) return Unauthorized();
 
         await _postgres.AddOrUpdateReviewLikeAsync(reviewId, userId, request.IsPositive);
+        await _postgres.RecordActivityAsync(userId, "review_liked", tmdbId, reviewId);
+        // notify review author
+        var reviews = await _postgres.GetMovieReviewsAsync(tmdbId);
+        var review = reviews.FirstOrDefault(r => r.Id == reviewId);
+        if (review?.UserId.HasValue == true && review.UserId.Value != userId)
+            await _postgres.CreateNotificationAsync(review.UserId.Value, userId, "review_liked", tmdbId, reviewId);
         return Ok();
     }
 
