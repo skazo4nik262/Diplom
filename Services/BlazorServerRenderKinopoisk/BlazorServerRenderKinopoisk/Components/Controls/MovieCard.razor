@@ -1,0 +1,41 @@
+@inject NavigationManager Navigation
+
+<div @onclick="GoToMovie"
+     @onmouseenter="(e) => OnHover.InvokeAsync(Movie)"
+     @onmouseleave="() => OnUnhover.InvokeAsync()"
+     @onmousemove="(e) => OnMouseMove.InvokeAsync(e)"
+     class="movie-card">
+    <div class="movie-poster" style="background-image: url('@Movie.PosterUrl')">
+        <div class="movie-rating-badge@(Movie.VoteAverage > 7.0 ? " high-rating" : "")">
+            @Movie.RatingText
+        </div>
+        @if (UserStatus?.Status is not null && UserStatus.Status != "favorite")
+        {
+            <div class="movie-status-badge status-@UserStatus.Status">@StatusText(UserStatus.Status)</div>
+        }
+        @if (UserStatus?.Rating is not null)
+        {
+            <div class="movie-user-rating-badge">@UserStatus.Rating.Value</div>
+        }
+    </div>
+    <div class="movie-title">@Movie.Title</div>
+</div>
+
+@code {
+    [Parameter] public MovieDto Movie { get; set; } = null!;
+    [Parameter] public UserMovieStatusDto? UserStatus { get; set; }
+    [Parameter] public EventCallback<MovieDto> OnHover { get; set; }
+    [Parameter] public EventCallback OnUnhover { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnMouseMove { get; set; }
+
+    private void GoToMovie() => Navigation.NavigateTo($"/movie/{Movie.Id}");
+
+    private static string StatusText(string? status) => status switch
+    {
+        "watching" => "Смотрю",
+        "planned" => "Запланировано",
+        "watched" => "Просмотрено",
+        "dropped" => "Брошено",
+        _ => status ?? ""
+    };
+}

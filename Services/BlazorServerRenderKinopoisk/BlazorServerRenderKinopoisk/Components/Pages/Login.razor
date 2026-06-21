@@ -8,14 +8,14 @@
 <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex flex-column align-center mt-16">
     <MudCard Elevated Class="pa-8" Style="width: 100%; max-width: 420px;">
         <MudCardContent>
-            <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-8">Welcome</MudText>
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-8">Вход</MudText>
 
-            <MudTextField @bind-Value="login" Label="Login" Variant="Variant.Outlined" Class="mb-4" />
-            <MudTextField @bind-Value="password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-6" />
+            <MudTextField @bind-Value="login" Label="Логин" Variant="Variant.Outlined" Class="mb-4" />
+            <MudTextField @bind-Value="password" Label="Пароль" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-6" />
 
             <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
                        Disabled="@isLoading" OnClick="@HandleLogin" Class="mb-4" Size="Size.Large">
-                @(isLoading ? "Logging in..." : "Login")
+                @(isLoading ? "Вход..." : "Войти")
                 @if (isLoading)
                 {
                     <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
@@ -23,7 +23,7 @@
             </MudButton>
 
             <MudText Align="Align.Center">
-                <MudLink Href="/register">Don't have an account? Register</MudLink>
+                <MudLink Href="/register">Нет аккаунта? Зарегистрироваться</MudLink>
             </MudText>
         </MudCardContent>
     </MudCard>
@@ -38,7 +38,7 @@
     {
         if (string.IsNullOrWhiteSpace(login) || string.IsNullOrWhiteSpace(password))
         {
-            Snackbar.Add("Fill in all fields", Severity.Warning);
+            Snackbar.Add("Заполните все поля", Severity.Warning);
             return;
         }
 
@@ -50,7 +50,7 @@
 
         if (result is null)
         {
-            Snackbar.Add(err ?? "Login failed", Severity.Error);
+            Snackbar.Add(err ?? "Ошибка входа", Severity.Error);
             return;
         }
 

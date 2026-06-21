@@ -106,25 +106,54 @@ public class MoviesController : ControllerBase
     }
 
     [HttpGet("search")]
-    public async Task<IActionResult> Search([FromQuery] string query, [FromQuery] int page = 1)
+    public async Task<IActionResult> Search(
+        [FromQuery] string query,
+        [FromQuery] int page = 1,
+        [FromQuery] string? genreIds = null,
+        [FromQuery] int? yearFrom = null,
+        [FromQuery] int? yearTo = null,
+        [FromQuery] double? ratingFrom = null,
+        [FromQuery] double? ratingTo = null,
+        [FromQuery] int? runtimeFrom = null,
+        [FromQuery] int? runtimeTo = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortOrder = null)
     {
-        if (string.IsNullOrWhiteSpace(query))
-            return BadRequest("Query parameter is required.");
+        var parsedGenreIds = genreIds?.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(id => int.TryParse(id, out var g) ? g : (int?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
 
-        var results = await _postgres.SearchMoviesAsync(query, page);
-        if (results.Count != 0) return Ok(results);
+        if (string.IsNullOrWhiteSpace(query) && (parsedGenreIds is null || parsedGenreIds.Count == 0)
+            && !yearFrom.HasValue && !yearTo.HasValue && !ratingFrom.HasValue && !ratingTo.HasValue)
+            return BadRequest("At least one filter parameter is required.");
 
-        var tmdbResults = await _tmdb.SearchMoviesAsync(query, null, page);
-        if (tmdbResults.Results.Count == 0) return Ok(results);
+        var results = await _postgres.SearchMoviesAsync(query, page, parsedGenreIds,
+            yearFrom, yearTo, ratingFrom, ratingTo, runtimeFrom, runtimeTo, sortBy, sortOrder);
+        if (results.Count != 0 || parsedGenreIds?.Count > 0) return Ok(results);
 
-        foreach (var searchMovie in tmdbResults.Results)
+        try
         {
-            var movie = await _tmdb.GetMovieFullDetailsAsync(searchMovie.Id);
-            if (movie is not null)
-                await _postgres.AddMovie(movie);
+            var tmdbResults = await _tmdb.SearchMoviesAsync(query, "ru-RU", page);
+            if (tmdbResults.Results.Count == 0) return Ok(results);
+
+            var tmdbIds = tmdbResults.Results.Select(m => m.Id).ToList();
+
+            foreach (var searchMovie in tmdbResults.Results)
+            {
+                var movie = await _tmdb.GetMovieFullDetailsAsync(searchMovie.Id);
+                if (movie is not null)
+                    await _postgres.AddMovie(movie);
+            }
+
+            results = await _postgres.GetMoviesBatchAsync(tmdbIds);
+        }
+        catch
+        {
+            return StatusCode(503);
         }
 
-        results = await _postgres.SearchMoviesAsync(query, page);
         return Ok(results);
     }
 
@@ -142,6 +171,13 @@ public class MoviesController : ControllerBase
         return Ok(movies);
     }
 
+    [HttpGet("trending")]
+    public async Task<IActionResult> GetTrending([FromQuery] int page = 1)
+    {
+        var movies = await _postgres.GetTrendingMoviesAsync(page);
+        return Ok(movies);
+    }
+
     [HttpGet("recommendations")]
     public async Task<IActionResult> GetRecommendations([FromQuery] int page = 1)
     {
@@ -150,5 +186,26 @@ public class MoviesController : ControllerBase
 
         var recommendations = await _postgres.GetRecommendationsAsync(userId, page);
         return Ok(recommendations);
+    }
+
+    [HttpGet("{tmdbId:int}/rating-distribution")]
+    public async Task<IActionResult> GetRatingDistribution(int tmdbId)
+    {
+        var distribution = await _postgres.GetMovieRatingDistributionAsync(tmdbId);
+        return Ok(distribution);
+    }
+
+    [HttpGet("{tmdbId:int}/videos")]
+    public async Task<IActionResult> GetVideos(int tmdbId)
+    {
+        var videos = await _postgres.GetMovieVideosAsync(tmdbId);
+        return Ok(videos);
+    }
+
+    [HttpGet("{tmdbId:int}/images")]
+    public async Task<IActionResult> GetImages(int tmdbId, [FromQuery] string? type = null)
+    {
+        var images = await _postgres.GetMovieImagesAsync(tmdbId, type);
+        return Ok(images);
     }
 }

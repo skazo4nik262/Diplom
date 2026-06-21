@@ -21,14 +21,14 @@ public class UserMoviesController : ControllerBase
         return Guid.Empty;
     }
 
-    [HttpGet("{tmdbId:int}/rating")]
-    public async Task<IActionResult> GetUserMovieRating(int tmdbId)
+    [HttpGet("{tmdbId:int}/status")]
+    public async Task<IActionResult> GetUserMovieStatus(int tmdbId)
     {
         var userId = GetUserId();
         if (userId == Guid.Empty) return Unauthorized();
 
-        var rating = await _postgres.GetUserMovieRatingAsync(userId, tmdbId);
-        return Ok(new { rating });
+        var (rating, status) = await _postgres.GetUserMovieStatusAsync(userId, tmdbId);
+        return Ok(new { rating, status });
     }
 
     [HttpGet]
@@ -61,6 +61,23 @@ public class UserMoviesController : ControllerBase
         return Ok();
     }
 
+    [HttpGet("batch-status")]
+    public async Task<IActionResult> GetBatchStatus([FromQuery] string? movieIds)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        var parsedIds = movieIds?.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(id => int.TryParse(id, out var g) ? g : (int?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList() ?? [];
+
+        var result = await _postgres.GetUserMoviesStatusBatchAsync(userId, parsedIds);
+        var dto = result.ToDictionary(kv => kv.Key, kv => new { kv.Value.Rating, kv.Value.Status });
+        return Ok(dto);
+    }
+
     [HttpDelete("{tmdbId:int}")]
     public async Task<IActionResult> RemoveMovie(int tmdbId)
     {
@@ -69,6 +86,38 @@ public class UserMoviesController : ControllerBase
 
         await _postgres.RemoveUserMovieAsync(userId, tmdbId);
         return Ok();
+    }
+
+    [HttpPost("{tmdbId:int}/favorite")]
+    public async Task<IActionResult> SetFavorite(int tmdbId)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        await _postgres.SetMovieStatusAsync(userId, tmdbId, "favorite");
+        return Ok();
+    }
+
+    [HttpDelete("{tmdbId:int}/favorite")]
+    public async Task<IActionResult> RemoveFavorite(int tmdbId)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        var (_, status) = await _postgres.GetUserMovieStatusAsync(userId, tmdbId);
+        if (status == "favorite")
+            await _postgres.RemoveUserMovieAsync(userId, tmdbId);
+        return Ok();
+    }
+
+    [HttpGet("favorites")]
+    public async Task<IActionResult> GetFavorites([FromQuery] int page = 1)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        var movies = await _postgres.GetUserMoviesAsync(userId, "favorite", page);
+        return Ok(movies);
     }
 }
 

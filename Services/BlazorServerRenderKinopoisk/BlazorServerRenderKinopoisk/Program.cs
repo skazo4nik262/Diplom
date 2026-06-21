@@ -21,7 +21,7 @@ namespace BlazorServerRenderKinopoisk
             var apiUrl = builder.Configuration.GetSection("ApiClient")["ApiUrl"] ?? "http://screeny.ddns.net";
             builder.Services.AddSingleton<IFlurlClient>(new FlurlClient(apiUrl));
             builder.Services.AddScoped<TokenStore>();
-            builder.Services.AddSingleton<AuthService>();
+            builder.Services.AddScoped<AuthService>();
             builder.Services.AddScoped<CatalogService>();
 
             var app = builder.Build();
@@ -32,7 +32,7 @@ namespace BlazorServerRenderKinopoisk
                 app.UseExceptionHandler("/Error");
             }
 
-            app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+            app.UseStatusCodePagesWithReExecute("/not-found");
             app.UseAntiforgery();
 
             app.MapStaticAssets();

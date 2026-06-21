@@ -1,13 +1,14 @@
 ﻿using IdentityService.Models;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IdentityService.Controllers
 {
-    public record RegisterRequest(string Login, string Password, int Role = 1);
+    public record RegisterRequest(string Login, string Password, string? Username = null, int Role = 1);
     public record LoginRequest(string Login, string Password);
-    public record AuthResponse(string Token, Guid UserId, string Login, int Role);
-    public record UserResponse(Guid Id, string Login, int Role);
+    public record AuthResponse(string Token, Guid UserId, string Login, string? Username, int Role);
+    public record UserResponse(Guid Id, string Login, string? Username, int Role);
+    public record ProfileResponse(Guid Id, string Login, string? Username, string? Bio, DateTime? Birthday, string? AvatarUrl, int Role);
+    public record UpdateProfileRequest(string? Username, string? Bio, DateTime? Birthday, string? AvatarUrl);
 
     [Route("api/[controller]")]
     [ApiController]
@@ -22,6 +23,13 @@ namespace IdentityService.Controllers
             _logger = logger;
         }
 
+        private Guid GetUserId()
+        {
+            if (Request.Headers.TryGetValue("X-User-Id", out var value) && Guid.TryParse(value, out var userId))
+                return userId;
+            return Guid.Empty;
+        }
+
         [HttpPost("register")]
         public async Task<ActionResult<UserResponse>> Register([FromBody] RegisterRequest request)
         {
@@ -33,9 +41,9 @@ namespace IdentityService.Controllers
 
             try
             {
-                var user = await _identityService.CreateAsync(request.Login, request.Password, request.Role);
+                var user = await _identityService.CreateAsync(request.Login, request.Password, request.Role, request.Username);
                 _logger.LogInformation("User registered: {Login}", user.Login);
-                return Ok(new UserResponse(user.Id, user.Login, user.Role));
+                return Ok(new UserResponse(user.Id, user.Login, user.Username, user.Role));
             }
             catch (InvalidOperationException ex)
             {
@@ -57,6 +65,7 @@ namespace IdentityService.Controllers
                 Token: token,
                 UserId: user!.Id,
                 Login: user.Login,
+                Username: user.Username,
                 Role: user.Role
             ));
         }
@@ -67,7 +76,28 @@ namespace IdentityService.Controllers
             var user = await _identityService.GetByLoginAsync(login);
             if (user is null) return NotFound();
 
-            return Ok(new UserResponse(user.Id, user.Login, user.Role));
+            return Ok(new UserResponse(user.Id, user.Login, user.Username, user.Role));
+        }
+
+        [HttpGet("users/id/{id:guid}")]
+        public async Task<ActionResult<ProfileResponse>> GetUserById(Guid id)
+        {
+            var user = await _identityService.GetByIdAsync(id);
+            if (user is null) return NotFound();
+
+            return Ok(new ProfileResponse(user.Id, user.Login, user.Username, user.Bio, user.Birthday, user.AvatarUrl, user.Role));
+        }
+
+        [HttpPost("profile")]
+        public async Task<ActionResult<ProfileResponse>> UpdateProfile([FromBody] UpdateProfileRequest request)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty) return Unauthorized(new { error = "Invalid token" });
+
+            var user = await _identityService.UpdateProfileAsync(userId, request.Username, request.Bio, request.Birthday, request.AvatarUrl);
+            if (user is null) return NotFound();
+
+            return Ok(new ProfileResponse(user.Id, user.Login, user.Username, user.Bio, user.Birthday, user.AvatarUrl, user.Role));
         }
 
         [HttpDelete("users/{id:guid}")]

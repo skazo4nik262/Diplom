@@ -1,0 +1,145 @@
+@page "/playlists/{PlaylistId:int}"
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<div class="mt-4">
+    @if (_loading)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudProgressCircular Indeterminate Size="Size.Large" />
+        </div>
+    }
+    else if (_playlist is null)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudText Typo="Typo.h6" Style="opacity: 0.5">Плейлист не найден</MudText>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex align-center gap-4 mb-4" style="flex-wrap: wrap;">
+            <button class="back-btn" @onclick="GoBack">← Назад</button>
+            <MudText Typo="Typo.h5" Class="mb-0">@_playlist.Name</MudText>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" @onclick="ShowEditDialog">Редактировать</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" @onclick="DeletePlaylist">Удалить</MudButton>
+        </div>
+        @if (!string.IsNullOrEmpty(_playlist.Description))
+        {
+            <MudText Typo="Typo.body2" Style="opacity: 0.6" Class="mb-4">@_playlist.Description</MudText>
+        }
+
+        @if (_playlist.Items?.Count == 0)
+        {
+            <div class="d-flex justify-center mt-8">
+                <MudText Typo="Typo.h6" Style="opacity: 0.5">В плейлисте нет фильмов</MudText>
+            </div>
+        }
+        else
+        {
+            <div class="profile-movie-grid">
+                @foreach (var item in _playlist.Items!)
+                {
+                    <div class="profile-movie-card" style="position: relative">
+                        <MovieCard Movie="item.Movie" UserStatus="_userStatuses.GetValueOrDefault(item.MovieId)" />
+                        <button class="playlist-remove-btn" @onclick="() => RemoveMovie(item.MovieId)" title="Удалить из плейлиста">×</button>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public int PlaylistId { get; set; }
+
+    private PlaylistDto? _playlist;
+    private bool _loading = true;
+    private Dictionary<int, UserMovieStatusDto> _userStatuses = [];
+
+    private void GoBack() => Navigation.NavigateTo("/playlists");
+    private void GoToMovie(int id) => Navigation.NavigateTo($"/movie/{id}");
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        _playlist = await Catalog.GetPlaylistAsync(PlaylistId);
+        _loading = false;
+
+        if (_playlist?.Items?.Count > 0)
+        {
+            var ids = _playlist.Items.Where(i => i.MovieId > 0).Select(i => i.MovieId).Distinct().ToList();
+            if (ids.Count > 0)
+                _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(ids);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RemoveMovie(int movieId)
+    {
+        await Catalog.RemoveMovieFromPlaylistAsync(PlaylistId, movieId);
+        _playlist = await Catalog.GetPlaylistAsync(PlaylistId);
+        _userStatuses = [];
+        if (_playlist?.Items?.Count > 0)
+        {
+            var ids = _playlist.Items.Where(i => i.MovieId > 0).Select(i => i.MovieId).Distinct().ToList();
+            if (ids.Count > 0)
+                _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(ids);
+        }
+        StateHasChanged();
+    }
+
+    private async Task DeletePlaylist()
+    {
+        await Catalog.DeletePlaylistAsync(PlaylistId);
+        Navigation.NavigateTo("/playlists");
+    }
+
+    private bool _showEditDialog;
+    private string _editName = "";
+    private string? _editDescription;
+
+    private void ShowEditDialog()
+    {
+        _editName = _playlist?.Name ?? "";
+        _editDescription = _playlist?.Description;
+        _showEditDialog = true;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (string.IsNullOrWhiteSpace(_editName)) return;
+        await Catalog.UpdatePlaylistAsync(PlaylistId, _editName, _editDescription);
+        _showEditDialog = false;
+        _playlist = await Catalog.GetPlaylistAsync(PlaylistId);
+        Snackbar.Add("Плейлист обновлён", Severity.Success);
+        StateHasChanged();
+    }
+}
+
+@if (_showEditDialog)
+{
+    <div class="dialog-overlay" @onclick="() => _showEditDialog = false">
+        <div class="dialog-content" @onclick:stopPropagation>
+            <MudText Typo="Typo.h6" Class="mb-4">Редактировать плейлист</MudText>
+            <MudTextField @bind-Value="_editName" Label="Название" Variant="Variant.Outlined" Class="mb-4" />
+            <MudTextField @bind-Value="_editDescription" Label="Описание (необязательно)" Variant="Variant.Outlined" Class="mb-4" />
+            <div class="d-flex justify-end gap-2">
+                <MudButton Variant="Variant.Text" @onclick="() => _showEditDialog = false">Отмена</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" @onclick="SaveEdit"
+                           Disabled="string.IsNullOrWhiteSpace(_editName)">Сохранить</MudButton>
+            </div>
+        </div>
+    </div>
+}

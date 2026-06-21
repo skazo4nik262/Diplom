@@ -1,16 +1,17 @@
 ﻿using BlazorServerRenderKinopoisk.Models;
 using Flurl.Http;
-using Microsoft.AspNetCore.Identity.Data;
 
 namespace BlazorServerRenderKinopoisk.Services
 {
     public class AuthService
     {
         private readonly IFlurlClient _flurl;
+        private readonly TokenStore _tokenStore;
 
-        public AuthService(IFlurlClient flurl)
+        public AuthService(IFlurlClient flurl, TokenStore tokenStore)
         {
             _flurl = flurl;
+            _tokenStore = tokenStore;
         }
 
         public async Task<(AuthResponse? Result, string? Error)> LoginAsync(string login, string password)
@@ -18,7 +19,7 @@ namespace BlazorServerRenderKinopoisk.Services
             try
             {
                 var result = await _flurl.Request("api/auth/login")
-                    .PostJsonAsync(new Models.LoginRequest(login, password))
+                    .PostJsonAsync(new LoginRequest(login, password))
                     .ReceiveJson<AuthResponse>();
                 return (result, null);
             }
@@ -32,18 +33,14 @@ namespace BlazorServerRenderKinopoisk.Services
                 }
                 catch { return (null, "Login failed"); }
             }
-            catch (Exception ex)
-            {
-                return (null, $"Connection error: {ex.Message}");
-            }
         }
 
-        public async Task<(RegisterResponse? Result, string? Error)> RegisterAsync(string login, string password)
+        public async Task<(RegisterResponse? Result, string? Error)> RegisterAsync(string login, string password, string? username = null)
         {
             try
             {
                 var result = await _flurl.Request("api/auth/register")
-                    .PostJsonAsync(new Models.RegisterRequest(login, password))
+                    .PostJsonAsync(new RegisterRequest(login, password, username))
                     .ReceiveJson<RegisterResponse>();
                 return (result, null);
             }
@@ -57,10 +54,30 @@ namespace BlazorServerRenderKinopoisk.Services
                 }
                 catch { return (null, "Registration failed"); }
             }
-            catch (Exception ex)
+        }
+
+        public async Task<ProfileResponse?> GetProfileAsync()
+        {
+            try
             {
-                return (null, $"Connection error: {ex.Message}");
+                return await _flurl.Request("api/auth/profile")
+                    .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                    .PostJsonAsync(new { })
+                    .ReceiveJson<ProfileResponse>();
             }
+            catch { return null; }
+        }
+
+        public async Task<ProfileResponse?> UpdateProfileAsync(string? username, string? bio, DateTime? birthday, string? avatarUrl)
+        {
+            try
+            {
+                return await _flurl.Request("api/auth/profile")
+                    .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                    .PostJsonAsync(new UpdateProfileRequest(username, bio, birthday, avatarUrl))
+                    .ReceiveJson<ProfileResponse>();
+            }
+            catch { return null; }
         }
     }
     public record ErrorBody(string Error);

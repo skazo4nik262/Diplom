@@ -17,11 +17,12 @@ namespace CatalogService.Services
             ?? throw new InvalidOperationException("TMDB API Key is missing in configuration.");
 
             _client = new TMDbClient(apiKey);
+            _client.DefaultLanguage = "ru-RU";
         }
         #region поиск
         public async Task<SearchContainer<SearchMovie>> SearchMoviesAsync(string query, string? lang, int page = 1)
         {
-            return await _client.SearchMovieAsync(query, language: lang, page: page);
+            return await _client.SearchMovieAsync(query, language: lang ?? "ru-RU", page: page);
         }
 
         public async Task<Movie?> GetMovieDetailsAsync(int tmdbId)

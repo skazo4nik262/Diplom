@@ -21,4 +21,6 @@ public class ReviewEntity
 
     public MovieEntity Movie { get; set; } = null!;
     public UserEntity? User { get; set; }
+    public ICollection<ReviewCommentEntity> Comments { get; set; } = new List<ReviewCommentEntity>();
+    public ICollection<ReviewLikeEntity> Likes { get; set; } = new List<ReviewLikeEntity>();
 }

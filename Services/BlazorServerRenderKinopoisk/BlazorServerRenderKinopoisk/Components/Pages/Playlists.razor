@@ -1,0 +1,107 @@
+@page "/playlists"
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+
+<div class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h5">Мои плейлисты</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" @onclick="ShowCreateDialog">+ Новый плейлист</MudButton>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudProgressCircular Indeterminate Size="Size.Large" />
+        </div>
+    }
+    else if (_playlists.Count == 0)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudText Typo="Typo.h6" Style="opacity: 0.5">Плейлистов пока нет</MudText>
+        </div>
+    }
+    else
+    {
+        <div class="search-grid">
+            @foreach (var playlist in _playlists)
+            {
+                <div @onclick="() => GoToPlaylist(playlist.Id)" class="playlist-card" style="cursor: pointer; position: relative">
+                    <button class="playlist-delete-btn" @onclick:stopPropagation @onclick="() => DeletePlaylist(playlist.Id)" title="Удалить">×</button>
+                    <div class="playlist-card-header">
+                        <div class="playlist-card-name">@playlist.Name</div>
+                        <div class="playlist-card-count">фильмов: @playlist.MovieCount</div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(playlist.Description))
+                    {
+                        <div class="playlist-card-desc">@playlist.Description</div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (_showCreateDialog)
+{
+    <div class="dialog-overlay" @onclick="CancelCreate">
+        <div class="dialog-content" @onclick:stopPropagation>
+            <MudText Typo="Typo.h6" Class="mb-4">Создать плейлист</MudText>
+            <MudTextField @bind-Value="_newName" Label="Название" Variant="Variant.Outlined" Class="mb-4" />
+            <MudTextField @bind-Value="_newDescription" Label="Описание (необязательно)" Variant="Variant.Outlined" Class="mb-4" />
+            <div class="d-flex justify-end gap-2">
+                <MudButton Variant="Variant.Text" @onclick="CancelCreate">Отмена</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" @onclick="CreatePlaylist"
+                           Disabled="string.IsNullOrWhiteSpace(_newName)">Создать</MudButton>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<PlaylistDto> _playlists = [];
+    private bool _loading = true;
+    private bool _showCreateDialog;
+    private string _newName = "";
+    private string? _newDescription;
+
+    private void GoToPlaylist(int id) => Navigation.NavigateTo($"/playlists/{id}");
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        _playlists = await Catalog.GetPlaylistsAsync();
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private void ShowCreateDialog() => _showCreateDialog = true;
+    private void CancelCreate() => _showCreateDialog = false;
+
+    private async Task CreatePlaylist()
+    {
+        if (string.IsNullOrWhiteSpace(_newName)) return;
+        await Catalog.CreatePlaylistAsync(_newName, _newDescription);
+        _showCreateDialog = false;
+        _newName = "";
+        _newDescription = "";
+        _playlists = await Catalog.GetPlaylistsAsync();
+        StateHasChanged();
+    }
+
+    private async Task DeletePlaylist(int id)
+    {
+        await Catalog.DeletePlaylistAsync(id);
+        _playlists = await Catalog.GetPlaylistsAsync();
+        StateHasChanged();
+    }
+}

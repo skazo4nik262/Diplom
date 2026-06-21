@@ -23,7 +23,7 @@ namespace IdentityService.Models
         public async Task<User?> GetByLoginAsync(string login) =>
             await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Login == login && u.IsActive);
 
-        public async Task<User> CreateAsync(string login, string password, int role = 1)
+        public async Task<User> CreateAsync(string login, string password, int role = 1, string? username = null)
         {
             if (await _db.Users.AnyAsync(u => u.Login == login))
                 throw new InvalidOperationException("Login already exists");
@@ -31,6 +31,7 @@ namespace IdentityService.Models
             var user = new User
             {
                 Login = login,
+                Username = string.IsNullOrWhiteSpace(username) ? login : username,
                 PasswordHash = _hasher.Hash(password),
                 Role = role,
                 IsActive = true,
@@ -38,6 +39,20 @@ namespace IdentityService.Models
             };
 
             _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+            return user;
+        }
+
+        public async Task<User?> UpdateProfileAsync(Guid id, string? username, string? bio, DateTime? birthday, string? avatarUrl)
+        {
+            var user = await _db.Users.FindAsync(id);
+            if (user is null || !user.IsActive) return null;
+
+            if (username is not null) user.Username = username;
+            if (bio is not null) user.Bio = bio;
+            if (birthday is not null) user.Birthday = birthday;
+            if (avatarUrl is not null) user.AvatarUrl = avatarUrl;
+
             await _db.SaveChangesAsync();
             return user;
         }

@@ -74,6 +74,26 @@ namespace ApiGateway
         // Защищённые маршруты \\
         new Yarp.ReverseProxy.Configuration.RouteConfig
         {
+            RouteId = "auth-profile",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/auth/profile"
+            },
+            ClusterId = "identity-cluster",
+            AuthorizationPolicy = "Authenticated"
+        },
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
+            RouteId = "auth-users-id",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/auth/users/id/{**catch-all}"
+            },
+            ClusterId = "identity-cluster",
+            AuthorizationPolicy = "Authenticated"
+        },
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
             RouteId = "catalog-poster",
             Match = new Yarp.ReverseProxy.Configuration.RouteMatch
             {
@@ -97,6 +117,16 @@ namespace ApiGateway
             Match = new Yarp.ReverseProxy.Configuration.RouteMatch
             {
                 Path = "/api/catalog/{**catch-all}"
+            },
+            ClusterId = "catalog-cluster",
+            AuthorizationPolicy = "Authenticated"
+        },
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
+            RouteId = "catalog-users",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/catalog/users/{**catch-all}"
             },
             ClusterId = "catalog-cluster",
             AuthorizationPolicy = "Authenticated"

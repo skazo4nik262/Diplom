@@ -30,6 +30,20 @@ public class PeopleController : ControllerBase
         return Ok(person);
     }
 
+    [HttpGet("{personId:int}/movies")]
+    public async Task<IActionResult> GetPersonMovies(int personId, [FromQuery] int page = 1)
+    {
+        var movies = await _postgres.GetPersonMoviesAsync(personId, page);
+        return Ok(movies);
+    }
+
+    [HttpGet("{personId:int}/known-for")]
+    public async Task<IActionResult> GetKnownFor(int personId)
+    {
+        var movies = await _postgres.GetKnownForMoviesAsync(personId);
+        return Ok(movies);
+    }
+
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string query)
     {

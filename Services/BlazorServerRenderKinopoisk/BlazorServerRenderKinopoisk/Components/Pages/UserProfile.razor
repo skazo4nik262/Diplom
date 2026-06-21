@@ -1,0 +1,94 @@
+@page "/user/{UserId:guid}"
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+
+<div class="mt-4">
+    @if (_loading)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudProgressCircular Indeterminate Size="Size.Large" />
+        </div>
+    }
+    else if (_profile is null)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudText Typo="Typo.h6" Style="opacity: 0.5">Пользователь не найден</MudText>
+        </div>
+    }
+    else
+    {
+        <div class="user-profile-header">
+            <div class="user-profile-avatar" style="background-image: url('@(_profile.AvatarUrl ?? "")')">
+                @if (string.IsNullOrEmpty(_profile.AvatarUrl))
+                {
+                    <span>@((_profile.Username ?? _profile.Login)[..1].ToUpper())</span>
+                }
+            </div>
+            <div>
+                <MudText Typo="Typo.h4">@(_profile.Username ?? _profile.Login)</MudText>
+                @if (!string.IsNullOrEmpty(_profile.Bio))
+                {
+                    <MudText Typo="Typo.body2" Style="opacity: 0.7">@_profile.Bio</MudText>
+                }
+                <div class="user-profile-stats">
+                    <span>🎬 @_profile.MovieCount фильмов</span>
+                    <span>📝 @(_profile.Reviews?.Count ?? 0) отзывов</span>
+                </div>
+                <div class="user-profile-status-counts">
+                    <span class="status-count watching">Смотрю: @_profile.WatchingCount</span>
+                    <span class="status-count planned">Запланировано: @_profile.PlannedCount</span>
+                    <span class="status-count watched">Просмотрено: @_profile.WatchedCount</span>
+                    <span class="status-count dropped">Брошено: @_profile.DroppedCount</span>
+                </div>
+            </div>
+        </div>
+
+        @if (_profile.Reviews?.Count > 0)
+        {
+            <MudText Typo="Typo.h5" Class="mt-6 mb-2">Отзывы</MudText>
+            <div class="reviews-list">
+                @foreach (var review in _profile.Reviews)
+                {
+                    <div class="review-card" @onclick="() => GoToMovie(review.MovieId)" style="cursor: pointer">
+                        <div class="review-header">
+                            <span class="review-movie-id">Фильм #@review.MovieId</span>
+                            @if (review.AuthorRating.HasValue)
+                            {
+                                <span class="review-rating">@review.AuthorRating.Value/10</span>
+                            }
+                            <span class="review-date">@review.CreatedAt?.ToString("dd.MM.yyyy")</span>
+                        </div>
+                        <div class="review-content">@review.Content</div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid UserId { get; set; }
+
+    private UserProfileDto? _profile;
+    private bool _loading = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        _profile = await Catalog.GetUserProfileAsync(UserId);
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private void GoToMovie(int movieId) => Navigation.NavigateTo($"/movie/{movieId}");
+}

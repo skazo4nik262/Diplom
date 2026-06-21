@@ -1,0 +1,76 @@
+@page "/collection/{CollectionId:int}"
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+
+<div class="mt-4 page-fade-in">
+    @if (_loading)
+    {
+        <div class="profile-movie-grid">
+            @for (var i = 0; i < 12; i++)
+            {
+                <div>
+                    <div class="skeleton skeleton-poster" style="width: 100%"></div>
+                    <div class="skeleton skeleton-text" style="margin-top: 8px"></div>
+                </div>
+            }
+        </div>
+    }
+    else if (_collection is null)
+    {
+        <MudText Typo="Typo.h5" Class="d-flex justify-center mt-16" Style="opacity: 0.5">Collection not found</MudText>
+    }
+    else
+    {
+        <div class="d-flex align-center gap-4 mb-4">
+            <button class="back-btn" @onclick="GoBack">← Back</button>
+            <div>
+                <MudText Typo="Typo.h4" Class="mb-0">@_collection.Name</MudText>
+                @if (!string.IsNullOrEmpty(_collection.Overview))
+                {
+                    <MudText Typo="Typo.body2" Style="opacity: 0.5">@_collection.Overview</MudText>
+                }
+            </div>
+        </div>
+        <div class="search-grid">
+            @foreach (var movie in _collection.Movies ?? [])
+            {
+                <div @onclick="() => GoToMovie(movie.Id)" class="movie-card" style="cursor: pointer">
+                    <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
+                        <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
+                            @movie.RatingText
+                        </div>
+                    </div>
+                    <div class="movie-title">@movie.Title</div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int CollectionId { get; set; }
+
+    private CollectionDto? _collection;
+    private bool _loading = true;
+
+    private void GoBack() => Navigation.NavigateTo("/main");
+    private void GoToMovie(int id) => Navigation.NavigateTo($"/movie/{id}");
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        _collection = await Catalog.GetCollectionByIdAsync(CollectionId);
+        _loading = false;
+        StateHasChanged();
+    }
+}

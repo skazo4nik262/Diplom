@@ -11,9 +11,14 @@ namespace CatalogService.Services
         Task<MovieEntity?> GetMovieAsync(int tmdbId);
         Task<MovieEntity?> GetMovieWithDetailsAsync(int tmdbId);
         Task<List<MovieEntity>> GetMoviesBatchAsync(IEnumerable<int> tmdbIds);
-        Task<List<MovieEntity>> SearchMoviesAsync(string query, int page);
+        Task<List<MovieEntity>> SearchMoviesAsync(string query, int page, List<int>? genreIds = null,
+            int? yearFrom = null, int? yearTo = null, double? ratingFrom = null, double? ratingTo = null,
+            int? runtimeFrom = null, int? runtimeTo = null, string? sortBy = null, string? sortOrder = null);
+        Task<List<MovieEntity>> GetPersonMoviesAsync(int personId, int page);
         Task<List<MovieEntity>> GetPopularMoviesAsync(int page);
         Task<List<MovieEntity>> GetTopRatedMoviesAsync(int page);
+        Task<List<MovieEntity>> GetTrendingMoviesAsync(int page);
+        Task<Dictionary<int, (int? Rating, string? Status)>> GetUserMoviesStatusBatchAsync(Guid userId, List<int> movieIds);
         Task<List<MovieCastEntity>> GetMovieCastAsync(int tmdbId);
         Task<List<MovieCrewEntity>> GetMovieCrewAsync(int tmdbId);
         Task<PersonEntity?> GetPersonAsync(int personId);
@@ -29,6 +34,11 @@ namespace CatalogService.Services
         Task<PersonEntity?> SearchPersonAsync(string query);
         Task<CollectionEntity?> GetCollectionAsync(int collectionId);
         Task<CollectionEntity?> GetMovieCollectionAsync(int tmdbId);
+        Task<List<ReviewEntity>> GetMovieReviewsAsync(int tmdbId);
+        Task<Dictionary<int, int>> GetMovieRatingDistributionAsync(int tmdbId);
+        Task<List<MovieEntity>> GetKnownForMoviesAsync(int personId);
+        Task<List<VideoEntity>> GetMovieVideosAsync(int tmdbId);
+        Task<List<ImageDataEntity>> GetMovieImagesAsync(int tmdbId, string? type = null);
         #endregion
 
         #region Add
@@ -39,14 +49,20 @@ namespace CatalogService.Services
         Task AddReviewAsync(Guid userId, int tmdbId, ReviewEntity review);
         Task AddPlaylistAsync(Guid userId, string name, string? description, IEnumerable<int> tmdbIds);
         Task AddMediaToPlaylistAsync(int playlistId, int tmdbId);
+        Task<ReviewEntity?> GetUserMovieReviewAsync(Guid userId, int tmdbId);
+        Task UpdateReviewAsync(ReviewEntity review);
+        Task<string?> GetUserLoginAsync(Guid userId);
+        Task AddReviewCommentAsync(string reviewId, Guid userId, string authorName, string content);
+        Task AddOrUpdateReviewLikeAsync(string reviewId, Guid userId, bool isPositive);
         #endregion
 
         #region Update
         Task UpdateMovie(Movie movie, int tmdbId);
         Task UpdatePerson(Person person, int personId);
         Task UpdateCollection(CollectionEntity collection);
+        Task UpdatePlaylistAsync(int playlistId, string name, string? description);
         Task RateMovieAsync(Guid userId, int tmdbId, int rating);
-        Task<int?> GetUserMovieRatingAsync(Guid userId, int tmdbId);
+        Task<(int? Rating, string? Status)> GetUserMovieStatusAsync(Guid userId, int tmdbId);
 
         #endregion
 
@@ -56,6 +72,18 @@ namespace CatalogService.Services
         Task RemoveCollection(int collectionId);
         Task RemoveUserMovieAsync(Guid userId, int tmdbId);
         Task RemoveMediaFromPlaylistAsync(int playlistId, int tmdbId);
+        Task RemoveReviewAsync(string reviewId);
+        Task DeletePlaylistAsync(int playlistId);
+        Task RemoveReviewLikeAsync(string reviewId, Guid userId);
+        #endregion
+
+        #region Queries
+        Task<UserEntity?> GetUserByIdAsync(Guid userId);
+        Task<List<ReviewEntity>> GetUserReviewsAsync(Guid userId, int page = 1);
+        Task<List<UserMovieEntity>> GetUserMoviesAllAsync(Guid userId);
+        Task<List<ReviewCommentEntity>> GetReviewCommentsAsync(string reviewId);
+        Task<(int Likes, int Dislikes)> GetReviewLikesCountAsync(string reviewId);
+        Task<bool?> GetUserReviewLikeAsync(string reviewId, Guid userId);
         #endregion
 
         #region Embeddings

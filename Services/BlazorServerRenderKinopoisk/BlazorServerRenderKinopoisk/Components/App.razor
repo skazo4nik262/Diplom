@@ -86,6 +86,26 @@
             var el = document.getElementById('movie-player');
             if (el && !el.plyr) new Plyr(el);
         };
+
+        window.showToast = function(message) {
+            var container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                document.body.appendChild(container);
+            }
+            var toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(function() { toast.remove(); }, 2500);
+        };
+
+        window.copyToClipboard = function(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                window.showToast('Ссылка скопирована');
+            });
+        };
     </script>
 </body>
 

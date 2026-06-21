@@ -7,85 +7,105 @@
 @inject IDialogService DialogService
 @inject IJSRuntime JS
 
+<div class="page-fade-in">
 <Hero Movies="popularMovies" />
 
-    @if (recommendedMovies.Count > 0)
+    <div class="genre-bar mt-4 mb-4">
+        @foreach (var genre in CatalogService.Genres)
+        {
+            <button class="genre-pill" @onclick="() => GoToGenre(genre.Id)">
+                @genre.Name
+            </button>
+        }
+    </div>
+
+    @if (trendingMovies.Count > 0)
     {
-        <MudText Typo="Typo.h5" Class="mb-2 mt-4">Recommended For You</MudText>
+        <MudText Typo="Typo.h5" Class="mb-2 mt-4">В тренде</MudText>
         <div class="carousel-wrapper">
-            <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), -1)" type="button">‹</button>
-            <div class="carousel">
-                @foreach (var movie in recommendedMovies)
+            <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.trending-carousel'), -1)" type="button">‹</button>
+            <div class="trending-carousel carousel">
+                @foreach (var movie in trendingMovies)
                 {
-                    <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="UnhoverMovie" @onmousemove="(e) => TrackMouse(e)" class="movie-card">
-                        <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
-                            <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
-                                @movie.RatingText
-                            </div>
-                        </div>
-                        <div class="movie-title">@movie.Title</div>
-                    </div>
+                    <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)"
+                               OnHover="HoverMovie" OnUnhover="UnhoverMovie" OnMouseMove="TrackMouse" />
                 }
             </div>
-            <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), 1)" type="button">›</button>
+            <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.trending-carousel'), 1)" type="button">›</button>
         </div>
     }
 
-    <MudText Typo="Typo.h5" Class="mb-2 mt-4">Popular Movies</MudText>
-    <div class="carousel-wrapper">
-        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), -1)" type="button">‹</button>
-        <div class="carousel">
-            @foreach (var movie in popularMovies)
-            {
-                <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="UnhoverMovie" @onmousemove="(e) => TrackMouse(e)" class="movie-card">
-                    <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
-                        <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
-                            @movie.RatingText
-                        </div>
-                    </div>
-                    <div class="movie-title">@movie.Title</div>
-                </div>
-            }
+    @if (recommendedMovies.Count > 0)
+    {
+        <MudText Typo="Typo.h5" Class="mb-2 mt-4">Рекомендуем вам</MudText>
+        <div class="carousel-wrapper">
+            <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.recommended-carousel'), -1)" type="button">‹</button>
+            <div class="recommended-carousel carousel">
+                @foreach (var movie in recommendedMovies)
+                {
+                    <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)"
+                               OnHover="HoverMovie" OnUnhover="UnhoverMovie" OnMouseMove="TrackMouse" />
+                }
+            </div>
+            <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.recommended-carousel'), 1)" type="button">›</button>
         </div>
-        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), 1)" type="button">›</button>
+    }
+
+    <MudText Typo="Typo.h5" Class="mb-2 mt-4">Популярные фильмы</MudText>
+    <div class="carousel-wrapper">
+        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.popular-carousel'), -1)" type="button">‹</button>
+            <div class="popular-carousel carousel">
+                @foreach (var movie in popularMovies)
+                {
+                    <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)"
+                               OnHover="HoverMovie" OnUnhover="UnhoverMovie" OnMouseMove="TrackMouse" />
+                }
+            </div>
+        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.popular-carousel'), 1)" type="button">›</button>
     </div>
 
-    <MudText Typo="Typo.h5" Class="mb-2 mt-6">Top Rated</MudText>
+    <MudText Typo="Typo.h5" Class="mb-2 mt-6">Хорошо оцененные</MudText>
     <div class="carousel-wrapper">
-        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), -1)" type="button">‹</button>
-        <div class="carousel">
-            @foreach (var movie in topRatedMovies)
-            {
-                <div @onmouseenter="(e) => HoverMovie(movie, e)" @onmouseleave="UnhoverMovie" @onmousemove="(e) => TrackMouse(e)" class="movie-card">
-                    <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
-                        <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
-                            @movie.RatingText
-                        </div>
-                    </div>
-                    <div class="movie-title">@movie.Title</div>
-                </div>
-            }
-        </div>
-        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.carousel'), 1)" type="button">›</button>
+        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.toprated-carousel'), -1)" type="button">‹</button>
+            <div class="toprated-carousel carousel">
+                @foreach (var movie in topRatedMovies)
+                {
+                    <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)"
+                               OnHover="HoverMovie" OnUnhover="UnhoverMovie" OnMouseMove="TrackMouse" />
+                }
+            </div>
+        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.toprated-carousel'), 1)" type="button">›</button>
     </div>
 
     @if (isLoading)
     {
-        <div class="d-flex justify-center mt-16">
-            <MudProgressCircular Indeterminate Size="Size.Large" />
+        <div class="carousel-wrapper mt-4">
+            <div class="carousel">
+                @for (var i = 0; i < 8; i++)
+                {
+                    <div class="skeleton-card">
+                        <div class="skeleton skeleton-poster"></div>
+                        <div class="skeleton skeleton-text"></div>
+                        <div class="skeleton skeleton-text-short"></div>
+                    </div>
+                }
+            </div>
         </div>
     }
+</div>
 
 @if (_hoveredMovie != null)
 {
-    <MovieTooltip Movie="_hoveredMovie" OnMouseEnter="CancelUnhover" OnMouseLeave="ScheduleUnhover" />
+    <MovieTooltip Movie="_hoveredMovie" UserStatus="_userStatuses.GetValueOrDefault(_hoveredMovie.Id)" OnMouseEnter="CancelUnhover" OnMouseLeave="ScheduleUnhover" OnStatusChanged="HandleStatusChanged" />
 }
 
 @code {
     private List<MovieDto> popularMovies = [];
     private List<MovieDto> topRatedMovies = [];
     private List<MovieDto> recommendedMovies = [];
+    private List<MovieDto> trendingMovies = [];
     private bool isLoading = true;
+    private Dictionary<int, UserMovieStatusDto> _userStatuses = [];
 
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
@@ -95,6 +115,8 @@
     private CancellationTokenSource? _hoverCts;
     private double _mouseX;
     private double _mouseY;
+
+    private void GoToGenre(int genreId) => Navigation.NavigateTo($"/search?genreIds={genreId}");
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -113,11 +135,17 @@
             var popularTask = Catalog.GetPopularAsync();
             var topRatedTask = Catalog.GetTopRatedAsync();
             var recsTask = Catalog.GetRecommendationsAsync();
-            await Task.WhenAll(popularTask, topRatedTask, recsTask);
+            var trendingTask = Catalog.GetTrendingAsync();
+            await Task.WhenAll(popularTask, topRatedTask, recsTask, trendingTask);
 
             popularMovies = popularTask.Result;
             topRatedMovies = topRatedTask.Result;
             recommendedMovies = recsTask.Result;
+            trendingMovies = trendingTask.Result;
+
+            var allIds = popularMovies.Concat(topRatedMovies).Concat(recommendedMovies).Concat(trendingMovies)
+                .Select(m => m.Id).Distinct().ToList();
+            _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(allIds);
         }
         catch (UnauthorizedAccessException)
         {
@@ -163,11 +191,8 @@
         }
     }
 
-    private void HoverMovie(MovieDto movie, MouseEventArgs e)
+    private void HoverMovie(MovieDto movie)
     {
-        _mouseX = e.ClientX;
-        _mouseY = e.ClientY;
-
         if (_hoveredMovie != null)
         {
             _hoverCts?.Cancel();
@@ -238,6 +263,15 @@
     private void CancelUnhover()
     {
         _hoverCts?.Cancel();
+    }
+
+    private void HandleStatusChanged((int MovieId, UserMovieStatusDto? Status) data)
+    {
+        if (data.Status is null)
+            _userStatuses.Remove(data.MovieId);
+        else
+            _userStatuses[data.MovieId] = data.Status;
+        StateHasChanged();
     }
 
     public void Dispose()

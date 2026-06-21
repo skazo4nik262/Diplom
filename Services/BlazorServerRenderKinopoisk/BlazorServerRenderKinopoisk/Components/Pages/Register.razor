@@ -7,15 +7,16 @@
 <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex flex-column align-center mt-16">
     <MudCard Elevated Class="pa-8" Style="width: 100%; max-width: 420px;">
         <MudCardContent>
-            <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-8">Create Account</MudText>
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-8">Создать аккаунт</MudText>
 
-            <MudTextField @bind-Value="login" Label="Login" Variant="Variant.Outlined" Class="mb-4" />
-            <MudTextField @bind-Value="password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-4" />
-            <MudTextField @bind-Value="confirmPassword" Label="Confirm Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-6" />
+            <MudTextField @bind-Value="login" Label="Логин" Variant="Variant.Outlined" Class="mb-4" />
+            <MudTextField @bind-Value="username" Label="Имя пользователя (необязательно)" Variant="Variant.Outlined" Class="mb-4" />
+            <MudTextField @bind-Value="password" Label="Пароль" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-4" />
+            <MudTextField @bind-Value="confirmPassword" Label="Подтвердите пароль" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-6" />
 
             <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
                        Disabled="@isLoading" OnClick="@HandleRegister" Class="mb-4" Size="Size.Large">
-                @(isLoading ? "Registering..." : "Register")
+                @(isLoading ? "Регистрация..." : "Зарегистрироваться")
                 @if (isLoading)
                 {
                     <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
@@ -23,7 +24,7 @@
             </MudButton>
 
             <MudText Align="Align.Center">
-                <MudLink Href="/login">Already have an account? Login</MudLink>
+                <MudLink Href="/login">Уже есть аккаунт? Авторизируйтесь</MudLink>
             </MudText>
         </MudCardContent>
     </MudCard>
@@ -31,6 +32,7 @@
 
 @code {
     private string login = "";
+    private string username = "";
     private string password = "";
     private string confirmPassword = "";
     private bool isLoading;
@@ -57,17 +59,18 @@
 
         isLoading = true;
 
-        var (result, err) = await AuthService.RegisterAsync(login, password);
+        var (result, err) = await AuthService.RegisterAsync(login, password,
+            string.IsNullOrWhiteSpace(username) ? null : username);
 
         isLoading = false;
 
         if (result is null)
         {
-            Snackbar.Add(err ?? "Registration failed", Severity.Error);
+            Snackbar.Add(err ?? "Ошибка регистрации", Severity.Error);
             return;
         }
 
-        Snackbar.Add("Account created! Please login.", Severity.Success);
+        Snackbar.Add("Аккаунт создан! Войдите.", Severity.Success);
         Navigation.NavigateTo("/login");
     }
 }

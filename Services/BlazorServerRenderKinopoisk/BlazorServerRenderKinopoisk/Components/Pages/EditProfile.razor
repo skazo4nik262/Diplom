@@ -1,0 +1,86 @@
+@page "/profile/edit"
+@rendermode InteractiveServer
+@inject AuthService AuthService
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex flex-column align-center mt-8">
+    <MudCard Elevated Class="pa-8" Style="width: 100%; max-width: 500px;">
+        <MudCardContent>
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-8">Редактировать профиль</MudText>
+
+            @if (_profile is null)
+            {
+                <MudProgressCircular Indeterminate />
+            }
+            else
+            {
+                <MudTextField @bind-Value="_username" Label="Имя пользователя" Variant="Variant.Outlined" Class="mb-4" />
+                <MudTextField @bind-Value="_bio" Label="О себе" Variant="Variant.Outlined" Class="mb-4" Lines="4" />
+                <MudDatePicker @bind-Date="_birthday" Label="Дата рождения" Variant="Variant.Outlined" Class="mb-6" />
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           Disabled="@_isLoading" OnClick="@HandleSave" Size="Size.Large">
+                    @(_isLoading ? "Сохранение..." : "Сохранить")
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
+                    }
+                </MudButton>
+            }
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private ProfileResponse? _profile;
+    private string _username = "";
+    private string _bio = "";
+    private DateTime? _birthday;
+    private bool _isLoading;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        _profile = await AuthService.GetProfileAsync();
+        if (_profile is not null)
+        {
+            _username = _profile.Username ?? "";
+            _bio = _profile.Bio ?? "";
+            _birthday = _profile.Birthday;
+        }
+        StateHasChanged();
+    }
+
+    private async Task HandleSave()
+    {
+        _isLoading = true;
+
+        var result = await AuthService.UpdateProfileAsync(
+            string.IsNullOrWhiteSpace(_username) ? null : _username,
+            string.IsNullOrWhiteSpace(_bio) ? null : _bio,
+            _birthday,
+            null);
+
+        _isLoading = false;
+
+        if (result is null)
+        {
+            Snackbar.Add("Ошибка сохранения профиля", Severity.Error);
+            return;
+        }
+
+        _profile = result;
+        Snackbar.Add("Профиль обновлён!", Severity.Success);
+        Navigation.NavigateTo("/profile");
+    }
+}

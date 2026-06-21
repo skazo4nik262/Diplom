@@ -9,51 +9,150 @@
 <div class="mt-4">
     @if (isLoading && movies.Count == 0)
     {
-        <div class="d-flex justify-center mt-16">
-            <MudProgressCircular Indeterminate Size="Size.Large" />
-        </div>
-    }
-    else if (movies.Count == 0 && !isLoading)
-    {
-        <div class="d-flex justify-center mt-16">
-            <MudText Typo="Typo.h6" Style="opacity: 0.5">No movies found</MudText>
-        </div>
-    }
-    else
-    {
-        <MudText Typo="Typo.h5" Class="mb-4">Search results for "@query"</MudText>
         <div class="search-grid">
-            @foreach (var movie in movies)
+            @for (var i = 0; i < 12; i++)
             {
-                <div @onclick="() => GoToMovie(movie)" class="movie-card" style="cursor: pointer">
-                    <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
-                        <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
-                            @movie.RatingText
-                        </div>
-                    </div>
-                    <div class="movie-title">@movie.Title</div>
+                <div class="skeleton-card">
+                    <div class="skeleton skeleton-poster"></div>
+                    <div class="skeleton skeleton-text"></div>
                 </div>
             }
         </div>
-        @if (_hasMore)
+    }
+    else if (!isLoading)
+    {
+        @if (!string.IsNullOrWhiteSpace(query))
         {
-            <div class="d-flex justify-center mt-4 mb-4">
-                @if (_isLoadingMore)
+            <MudText Typo="Typo.h5" Class="mb-4">Результаты поиска: "@query"</MudText>
+        }
+        else if (_selectedGenreIds.Count > 0)
+        {
+            var names = string.Join(", ", CatalogService.Genres.Where(g => _selectedGenreIds.Contains(g.Id)).Select(g => g.Name));
+            <MudText Typo="Typo.h5" Class="mb-4">Жанр: @names</MudText>
+        }
+
+        @if (_person is not null)
+        {
+            <MudText Typo="Typo.h6" Class="mb-2" Style="color: rgba(255,255,255,0.7);">Люди</MudText>
+            <div @onclick="() => GoToPerson(_person!.Id)" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 8px; cursor: pointer; margin-bottom: 16px;">
+                <div style="width: 48px; height: 48px; border-radius: 50%; background-size: cover; background-position: center; background-color: #1a1a1a; background-image: url('@_person.ProfileUrl')"></div>
+                <div>
+                    <div style="font-weight: 600;">@_person.Name</div>
+                    <div style="opacity: 0.5; font-size: 0.8rem;">@_person.KnownForDepartment</div>
+                </div>
+            </div>
+        }
+
+        @if (_filteredPlaylists.Count > 0)
+        {
+            <MudText Typo="Typo.h6" Class="mb-2" Style="color: rgba(255,255,255,0.7);">Плейлисты</MudText>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">
+                @foreach (var pl in _filteredPlaylists)
                 {
-                    <MudProgressCircular Indeterminate Size="Size.Small" />
-                }
-                else
-                {
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" @onclick="LoadMore">Load more</MudButton>
+                    <button @onclick="() => GoToPlaylist(pl.Id)"
+                            style="padding: 8px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer; text-align: left;">
+                        <div style="font-weight: 600; font-size: 0.9rem;">@pl.Name</div>
+                        <div style="opacity: 0.5; font-size: 0.75rem;">@pl.MovieCount шт.</div>
+                    </button>
                 }
             </div>
+        }
+
+        <div class="genre-filter">
+            @foreach (var genre in CatalogService.Genres)
+            {
+                <button class="genre-chip@(_selectedGenreIds.Contains(genre.Id) ? " selected" : "")"
+                        @onclick="() => ToggleGenre(genre.Id)">
+                    @genre.Name
+                </button>
+            }
+        </div>
+
+        <div class="search-filters">
+            <div class="search-filter-group">
+                <span class="search-filter-label">Год</span>
+                <div class="search-filter-row">
+                    <input type="number" class="search-filter-input" @bind="_yearFrom" placeholder="от" min="1900" max="2030" />
+                    <span class="search-filter-sep">—</span>
+                    <input type="number" class="search-filter-input" @bind="_yearTo" placeholder="до" min="1900" max="2030" />
+                </div>
+            </div>
+            <div class="search-filter-group">
+                <span class="search-filter-label">Рейтинг</span>
+                <div class="search-filter-row">
+                    <input type="number" class="search-filter-input" @bind="_ratingFrom" placeholder="от" min="0" max="10" step="0.1" />
+                    <span class="search-filter-sep">—</span>
+                    <input type="number" class="search-filter-input" @bind="_ratingTo" placeholder="до" min="0" max="10" step="0.1" />
+                </div>
+            </div>
+            <div class="search-filter-group">
+                <span class="search-filter-label">Длительность (мин)</span>
+                <div class="search-filter-row">
+                    <input type="number" class="search-filter-input" @bind="_runtimeFrom" placeholder="от" min="0" max="600" />
+                    <span class="search-filter-sep">—</span>
+                    <input type="number" class="search-filter-input" @bind="_runtimeTo" placeholder="до" min="0" max="600" />
+                </div>
+            </div>
+            <div class="search-filter-group">
+                <span class="search-filter-label">Сортировка</span>
+                <select class="search-filter-select" @bind="_sortBy">
+                    <option value="">По популярности</option>
+                    <option value="rating">По рейтингу</option>
+                    <option value="year">По году</option>
+                    <option value="title">По названию</option>
+                    <option value="runtime">По длительности</option>
+                </select>
+                <select class="search-filter-select" @bind="_sortOrder" style="margin-left: 4px; width: auto;">
+                    <option value="desc">↓</option>
+                    <option value="asc">↑</option>
+                </select>
+            </div>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@ApplyFilters" Class="search-filter-apply">Применить</MudButton>
+        </div>
+
+        @if (movies.Count == 0 && !_hasTmdbError)
+        {
+            <div class="d-flex justify-center mt-8">
+                <MudText Typo="Typo.h6" Style="opacity: 0.5">Фильмы не найдены</MudText>
+            </div>
+        }
+        else if (_hasTmdbError)
+        {
+            <div class="d-flex justify-center mt-8" style="flex-direction: column; align-items: center; gap: 8px;">
+                <MudText Typo="Typo.h6" Style="opacity: 0.5">Сервис поиска временно недоступен</MudText>
+                <MudText Typo="Typo.body2" Style="opacity: 0.3">Попробуйте повторить поиск позже</MudText>
+            </div>
+        }
+        else
+        {
+            <div class="search-grid">
+                @foreach (var movie in movies)
+                {
+                    <MovieCard Movie="movie" />
+                }
+            </div>
+            @if (_hasMore)
+            {
+                <div class="d-flex justify-center mt-4 mb-4">
+                    @if (_isLoadingMore)
+                    {
+                        <MudProgressCircular Indeterminate Size="Size.Small" />
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" @onclick="LoadMore">Загрузить ещё</MudButton>
+                    }
+                </div>
+            }
         }
     }
 </div>
 
 @code {
     [SupplyParameterFromQuery] public string? Query { get; set; }
+    [SupplyParameterFromQuery] public string? GenreIds { get; set; }
 
+    private bool _hasTmdbError;
     private List<MovieDto> movies = [];
     private string? query;
     private bool isLoading = true;
@@ -62,6 +161,19 @@
     private bool _isLoadingMore;
     private DotNetObjectReference<Search>? _dotNetRef;
     private bool _initialized;
+    private HashSet<int> _selectedGenreIds = [];
+
+    private int? _yearFrom;
+    private int? _yearTo;
+    private double? _ratingFrom;
+    private double? _ratingTo;
+    private int? _runtimeFrom;
+    private int? _runtimeTo;
+    private string _sortBy = "";
+    private string _sortOrder = "desc";
+
+    private PersonDto? _person;
+    private List<PlaylistDto> _filteredPlaylists = [];
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -75,6 +187,7 @@
         }
 
         _initialized = true;
+        ParseGenreIds();
         await DoSearch();
 
         if (_hasMore && movies.Count > 0)
@@ -87,23 +200,53 @@
     protected override async Task OnParametersSetAsync()
     {
         if (!_initialized) return;
-        if (Query != query)
+        var changed = Query != query;
+        ParseGenreIds();
+        if (changed)
             await DoSearch();
+    }
+
+    private void ParseGenreIds()
+    {
+        if (string.IsNullOrWhiteSpace(GenreIds)) return;
+        foreach (var part in GenreIds.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (int.TryParse(part, out var id))
+                _selectedGenreIds.Add(id);
+        }
+    }
+
+    private async Task ToggleGenre(int genreId)
+    {
+        if (!_selectedGenreIds.Remove(genreId))
+            _selectedGenreIds.Add(genreId);
+        await DoSearch();
+    }
+
+    private async Task ApplyFilters()
+    {
+        await DoSearch();
     }
 
     private async Task DoSearch()
     {
         query = Query;
-        if (string.IsNullOrWhiteSpace(query))
+        if (string.IsNullOrWhiteSpace(query) && _selectedGenreIds.Count == 0
+            && !_yearFrom.HasValue && !_yearTo.HasValue && !_ratingFrom.HasValue && !_ratingTo.HasValue)
         {
             isLoading = false;
             movies = [];
+            _person = null;
+            _filteredPlaylists = [];
             return;
         }
 
         _page = 1;
         _hasMore = true;
+        _hasTmdbError = false;
         movies = [];
+        _person = null;
+        _filteredPlaylists = [];
         isLoading = true;
         StateHasChanged();
 
@@ -116,33 +259,59 @@
 
         try
         {
-            movies = await Catalog.SearchAsync(query, _page);
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                var personTask = Catalog.SearchPersonAsync(query);
+                var playlistsTask = Catalog.GetPlaylistsAsync();
+                await Task.WhenAll(personTask, playlistsTask);
+
+                _person = personTask.Result;
+
+                var allPlaylists = playlistsTask.Result;
+                var q = query.ToLower();
+                _filteredPlaylists = allPlaylists
+                    .Where(p => p.Name is not null && p.Name.ToLower().Contains(q))
+                    .ToList();
+            }
+
+            var genreParam = _selectedGenreIds.Count > 0 ? string.Join(",", _selectedGenreIds) : null;
+            movies = await Catalog.SearchAsync(query, _page, genreParam,
+                _yearFrom, _yearTo, _ratingFrom, _ratingTo,
+                _runtimeFrom, _runtimeTo, _sortBy, _sortOrder);
             _hasMore = movies.Count > 0;
+            _hasTmdbError = false;
         }
         catch (UnauthorizedAccessException)
         {
             Navigation.NavigateTo("/login");
             return;
         }
+        catch (InvalidOperationException)
+        {
+            _hasTmdbError = true;
+            movies = [];
+        }
 
         isLoading = false;
-    }
-
-    private void GoToMovie(MovieDto movie)
-    {
-        Navigation.NavigateTo($"/movie/{movie.Id}");
     }
 
     [JSInvokable]
     public async Task LoadMore()
     {
-        if (_isLoadingMore || !_hasMore || string.IsNullOrWhiteSpace(query)) return;
+        if (_isLoadingMore || !_hasMore) return;
         _isLoadingMore = true;
         StateHasChanged();
 
         _page++;
         List<MovieDto>? newMovies;
-        try { newMovies = await Catalog.SearchAsync(query, _page); }
+        try
+        {
+            var genreParam = _selectedGenreIds.Count > 0 ? string.Join(",", _selectedGenreIds) : null;
+            newMovies = await Catalog.SearchAsync(query, _page, genreParam,
+                _yearFrom, _yearTo, _ratingFrom, _ratingTo,
+                _runtimeFrom, _runtimeTo, _sortBy, _sortOrder);
+        }
+        catch (InvalidOperationException) { _isLoadingMore = false; _hasTmdbError = true; StateHasChanged(); return; }
         catch { _isLoadingMore = false; return; }
 
         if (newMovies.Count == 0)
@@ -158,4 +327,7 @@
     {
         _dotNetRef?.Dispose();
     }
+
+    private void GoToPerson(int id) => Navigation.NavigateTo($"/person/{id}");
+    private void GoToPlaylist(int id) => Navigation.NavigateTo($"/playlists/{id}");
 }

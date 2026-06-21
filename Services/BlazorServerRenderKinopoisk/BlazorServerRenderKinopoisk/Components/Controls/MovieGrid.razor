@@ -1,0 +1,35 @@
+@if (Movies is { Count: > 0 })
+{
+    <div class="profile-movie-grid">
+        @foreach (var item in Movies)
+        {
+            if (item.Movie is not null)
+            {
+                <div class="profile-movie-card" style="position: relative">
+                    <MovieCard Movie="item.Movie"
+                               UserStatus="new UserMovieStatusDto { Status = item.Status, Rating = item.Rating }" />
+                    <button class="profile-movie-remove" @onclick="() => RemoveMovie(item.MovieId)" title="Удалить">×</button>
+                </div>
+            }
+        }
+    </div>
+}
+else
+{
+    <MudText Class="mt-8" Style="text-align: center; color: rgba(255,255,255,0.4);">Нет фильмов в этой категории</MudText>
+}
+
+@code {
+    [Parameter] public List<UserMovieDto> Movies { get; set; } = [];
+    [Parameter] public EventCallback<int> OnMovieRemoved { get; set; }
+
+    [Inject] private CatalogService Catalog { get; set; } = null!;
+    [Inject] private IJSRuntime JS { get; set; } = null!;
+
+    private async Task RemoveMovie(int movieId)
+    {
+        await Catalog.RemoveUserMovieAsync(movieId);
+        await JS.InvokeVoidAsync("showToast", "Удалено из ваших фильмов");
+        await OnMovieRemoved.InvokeAsync(movieId);
+    }
+}

@@ -1,17 +1,41 @@
 @implements IDisposable
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+@inject CatalogService Catalog
 
 <div class="tooltip-card" id="movie-tooltip" data-poster="@Movie.PosterUrl" @onmouseenter="() => OnMouseEnter.InvokeAsync()" @onmouseleave="() => OnMouseLeave.InvokeAsync()">
     @if (_readMoreMode)
     {
         <div class="tooltip-readmore">
             <div class="tooltip-backbar">
-                <button class="tooltip-back-btn" @onclick="GoBack">← Back</button>
+                <button class="tooltip-back-btn" @onclick="GoBack">← Назад</button>
             </div>
             <div class="tooltip-divider"></div>
             <div class="tooltip-fulloverview">
                 @Movie.Overview
+            </div>
+        </div>
+    }
+    else if (_showPlaylists)
+    {
+        <div class="tooltip-readmore">
+            <div class="tooltip-backbar">
+                <button class="tooltip-back-btn" @onclick="() => _showPlaylists = false">← Назад</button>
+                <span style="color: #fff; font-size: 0.85rem; font-weight: 600;">В плейлист</span>
+            </div>
+            <div class="tooltip-divider"></div>
+            <div class="tooltip-fulloverview" style="display: flex; flex-direction: column; gap: 6px;">
+                @if (_playlists.Count == 0)
+                {
+                    <span style="opacity: 0.5; font-size: 0.85rem;">Плейлистов пока нет</span>
+                }
+                @foreach (var pl in _playlists)
+                {
+                    <button class="tooltip-playlist-item" @onclick="() => AddToPlaylist(pl.Id)">
+                        <span>@pl.Name</span>
+                        <span style="opacity: 0.5; font-size: 0.75rem;">@pl.MovieCount</span>
+                    </button>
+                }
             </div>
         </div>
     }
@@ -24,20 +48,20 @@
                 @_displayOverview
                 @if (_showReadMore)
                 {
-                    <button class="tooltip-readmore-btn" @onclick="GoReadMore">read more</button>
+                    <button class="tooltip-readmore-btn" @onclick="GoReadMore">больше</button>
                 }
             </div>
             <div class="tooltip-actions">
-                <button class="tooltip-action-btn" title="Share">
+                <button class="tooltip-action-btn" title="Поделиться" @onclick="ShareMovie">
                     <svg viewBox="0 0 24 24" width="16" height="16"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/></svg>
                 </button>
-                <button class="tooltip-action-btn" title="Add to playlist">
+                <button class="tooltip-action-btn" title="Добавить в плейлист" @onclick="ShowPlaylistPicker">
                     <svg viewBox="0 0 24 24" width="16" height="16"><path d="M14 10H3v2h11v-2zm0-4H3v2h11V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM3 16h7v-2H3v2z" fill="currentColor"/></svg>
                 </button>
-                <button class="tooltip-action-btn" title="Add to favorites">
-                    <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="currentColor"/></svg>
+                <button class="tooltip-action-btn" title="Любимые" @onclick="ToggleFavorite">
+                    <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="@HeartColor" /></svg>
                 </button>
-                <button class="tooltip-action-btn tooltip-play-btn" title="Play" @onclick="PlayMovie">
+                <button class="tooltip-action-btn tooltip-play-btn" title="Смотреть" @onclick="PlayMovie">
                     <svg viewBox="0 0 24 24" width="16" height="16"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
                 </button>
             </div>
@@ -49,11 +73,18 @@
     [Parameter] public MovieDto Movie { get; set; } = null!;
     [Parameter] public EventCallback OnMouseEnter { get; set; }
     [Parameter] public EventCallback OnMouseLeave { get; set; }
+    [Parameter] public UserMovieStatusDto? UserStatus { get; set; }
+    [Parameter] public EventCallback<(int MovieId, UserMovieStatusDto? Status)> OnStatusChanged { get; set; }
 
     private bool _readMoreMode;
+    private bool _showPlaylists;
     private bool _showReadMore;
     private string _displayOverview = "";
     private const int OverviewLimit = 120;
+    private List<PlaylistDto> _playlists = [];
+
+    private bool _isFavorited => UserStatus?.Status == "favorite";
+    private string HeartColor => _isFavorited ? "#F6C516" : "currentColor";
 
     private string MetaText
     {
@@ -63,7 +94,7 @@
             if (!string.IsNullOrEmpty(Movie.ReleaseYear))
                 parts.Add(Movie.ReleaseYear);
             if (Movie.Runtime.HasValue)
-                parts.Add($"{Movie.Runtime.Value} min");
+                parts.Add($"{Movie.Runtime.Value} мин");
             if (Movie.Genres?.Count > 0)
                 parts.AddRange(Movie.Genres.Take(2).Select(g => g.Name ?? ""));
             return string.Join(", ", parts.Where(p => !string.IsNullOrEmpty(p)));
@@ -87,7 +118,7 @@
 
         if (string.IsNullOrEmpty(Movie.Overview))
         {
-            _displayOverview = "No overview available";
+            _displayOverview = "Описание отсутствует";
             _showReadMore = false;
         }
         else if (Movie.Overview.Length <= OverviewLimit)
@@ -117,6 +148,45 @@
     private void PlayMovie()
     {
         Navigation.NavigateTo($"/movie/{Movie.Id}");
+    }
+
+    private async Task ShareMovie()
+    {
+        var url = Navigation.BaseUri.TrimEnd('/') + $"/movie/{Movie.Id}";
+        await JS.InvokeVoidAsync("copyToClipboard", url);
+    }
+
+    private async Task ShowPlaylistPicker()
+    {
+        _playlists = await Catalog.GetPlaylistsAsync();
+        _showPlaylists = true;
+        StateHasChanged();
+        await JS.InvokeVoidAsync("positionTooltip");
+    }
+
+    private async Task AddToPlaylist(int playlistId)
+    {
+        await Catalog.AddMovieToPlaylistAsync(playlistId, Movie.Id);
+        await JS.InvokeVoidAsync("showToast", "Добавлено в плейлист");
+        _showPlaylists = false;
+    }
+
+    private async Task ToggleFavorite()
+    {
+        var wasFavorited = _isFavorited;
+        if (wasFavorited)
+        {
+            await Catalog.RemoveFavoriteAsync(Movie.Id);
+            UserStatus = null;
+        }
+        else
+        {
+            await Catalog.SetFavoriteAsync(Movie.Id);
+            UserStatus = new UserMovieStatusDto { Status = "favorite" };
+        }
+        await JS.InvokeVoidAsync("showToast", wasFavorited ? "Убрано из избранного" : "Добавлено в избранное");
+        await OnStatusChanged.InvokeAsync((Movie.Id, UserStatus));
+        StateHasChanged();
     }
 
     public void Dispose() { }

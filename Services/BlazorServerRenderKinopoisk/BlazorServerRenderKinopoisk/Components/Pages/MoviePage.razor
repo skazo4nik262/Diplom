@@ -5,13 +5,22 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<div class="mt-4">
+<div class="mt-4 page-fade-in">
     @if (_movie is null)
     {
         @if (_dataLoading)
         {
-            <div class="d-flex justify-center mt-16">
-                <MudProgressCircular Indeterminate Size="Size.Large" />
+            <div class="movie-detail-top" style="padding-top: 16px">
+                <div class="skeleton skeleton-detail-poster"></div>
+                <div class="skeleton-detail-info">
+                    <div class="skeleton skeleton-detail-line" style="width: 30%"></div>
+                    <div class="skeleton skeleton-detail-line" style="width: 80%"></div>
+                    <div class="skeleton skeleton-detail-line" style="width: 50%"></div>
+                    <div class="skeleton skeleton-detail-line mt-4"></div>
+                    <div class="skeleton skeleton-detail-line-long"></div>
+                    <div class="skeleton skeleton-detail-line-long"></div>
+                    <div class="skeleton skeleton-detail-line-long"></div>
+                </div>
             </div>
         }
     }
@@ -31,7 +40,7 @@
                     <span>@_movie.ReleaseYear</span>
                     @if (_movie.Runtime.HasValue)
                     {
-                        <span>@_movie.Runtime.Value min</span>
+                        <span>@_movie.Runtime.Value мин</span>
                     }
                 </div>
                 @if (_movie.Genres?.Count > 0)
@@ -52,9 +61,147 @@
                     {
                         <span>@string.Join(", ", _movie.ProductionCountries.Select(c => c.Name))</span>
                     }
+                    @if (_movie.Budget > 0)
+                    {
+                        <span>Бюджет: @_movie.BudgetText</span>
+                    }
+                    @if (_movie.Revenue > 0)
+                    {
+                        <span>Сборы: @_movie.RevenueText</span>
+                    }
+                </div>
+                @if (_directors.Count > 0)
+                {
+                    <div class="movie-detail-crew">
+                        <span class="movie-detail-crew-label">Режиссер: </span>
+                        <span class="movie-detail-crew-names">@string.Join(", ", _directors.Select(d => d.OriginalName))</span>
+                    </div>
+                }
+                @if (_writers.Count > 0)
+                {
+                    <div class="movie-detail-crew">
+                        <span class="movie-detail-crew-label">Сценарист: </span>
+                        <span class="movie-detail-crew-names">@string.Join(", ", _writers.Select(d => d.OriginalName))</span>
+                    </div>
+                }
+                @if (_producers.Count > 0)
+                {
+                    <div class="movie-detail-crew">
+                        <span class="movie-detail-crew-label">Продюсер: </span>
+                        <span class="movie-detail-crew-names">@string.Join(", ", _producers.Select(d => d.OriginalName))</span>
+                    </div>
+                }
+                @if (_composers.Count > 0)
+                {
+                    <div class="movie-detail-crew">
+                        <span class="movie-detail-crew-label">Композитор: </span>
+                        <span class="movie-detail-crew-names">@string.Join(", ", _composers.Select(d => d.OriginalName))</span>
+                    </div>
+                }
+                @if (_artDirectors.Count > 0)
+                {
+                    <div class="movie-detail-crew">
+                        <span class="movie-detail-crew-label">Художник: </span>
+                        <span class="movie-detail-crew-names">@string.Join(", ", _artDirectors.Select(d => d.OriginalName))</span>
+                    </div>
+                }
+                @if (_editors.Count > 0)
+                {
+                    <div class="movie-detail-crew">
+                        <span class="movie-detail-crew-label">Монтаж: </span>
+                        <span class="movie-detail-crew-names">@string.Join(", ", _editors.Select(d => d.OriginalName))</span>
+                    </div>
+                }
+                @if (_directorsOfPhotography.Count > 0)
+                {
+                    <div class="movie-detail-crew">
+                        <span class="movie-detail-crew-label">Оператор: </span>
+                        <span class="movie-detail-crew-names">@string.Join(", ", _directorsOfPhotography.Select(d => d.OriginalName))</span>
+                    </div>
+                }
+                @if (_showAllCrew)
+                {
+                    <div class="movie-detail-crew-extra">
+                        @if (_screenplay.Count > 0)
+                        {
+                            <div class="movie-detail-crew">
+                                <span class="movie-detail-crew-label">Сюжет: </span>
+                                <span class="movie-detail-crew-names">@string.Join(", ", _screenplay.Select(d => d.OriginalName))</span>
+                            </div>
+                        }
+                        @if (_novel.Count > 0)
+                        {
+                            <div class="movie-detail-crew">
+                                <span class="movie-detail-crew-label">Первоисточник: </span>
+                                <span class="movie-detail-crew-names">@string.Join(", ", _novel.Select(d => d.OriginalName))</span>
+                            </div>
+                        }
+                        @if (_executiveProducers.Count > 0)
+                        {
+                            <div class="movie-detail-crew">
+                                <span class="movie-detail-crew-label">Исполнительный продюсер: </span>
+                                <span class="movie-detail-crew-names">@string.Join(", ", _executiveProducers.Select(d => d.OriginalName))</span>
+                            </div>
+                        }
+                        @if (_coProducers.Count > 0)
+                        {
+                            <div class="movie-detail-crew">
+                                <span class="movie-detail-crew-label">Сопродюсер: </span>
+                                <span class="movie-detail-crew-names">@string.Join(", ", _coProducers.Select(d => d.OriginalName))</span>
+                            </div>
+                        }
+                        @if (_productionDesign.Count > 0)
+                        {
+                            <div class="movie-detail-crew">
+                                <span class="movie-detail-crew-label">Художник-постановщик: </span>
+                                <span class="movie-detail-crew-names">@string.Join(", ", _productionDesign.Select(d => d.OriginalName))</span>
+                            </div>
+                        }
+                        @if (_costumeDesign.Count > 0)
+                        {
+                            <div class="movie-detail-crew">
+                                <span class="movie-detail-crew-label">Художник по костюмам: </span>
+                                <span class="movie-detail-crew-names">@string.Join(", ", _costumeDesign.Select(d => d.OriginalName))</span>
+                            </div>
+                        }
+                        @if (_visualEffects.Count > 0)
+                        {
+                            <div class="movie-detail-crew">
+                                <span class="movie-detail-crew-label">Визуальные эффекты: </span>
+                                <span class="movie-detail-crew-names">@string.Join(", ", _visualEffects.Select(d => d.OriginalName))</span>
+                            </div>
+                        }
+                    </div>
+                }
+                @if (_crewHasMore)
+                {
+                    <button class="movie-detail-crew-more" @onclick="() => _showAllCrew = !_showAllCrew">
+                        @(_showAllCrew ? "меньше" : "ещё")
+                    </button>
+                }
+                <div class="movie-detail-status-section">
+                    <span class="movie-detail-status-label">Статус просмотра: </span>
+                    <div class="movie-detail-status-buttons">
+                        @foreach (var s in _statuses)
+                        {
+                            <button class="movie-detail-status-btn@(_movieStatus == s ? " selected" : "")"
+                                    @onclick="() => SetStatus(s)"
+                                    disabled="@_statusSending">
+                                @StatusDisplayText(s)
+                            </button>
+                        }
+                        @if (!string.IsNullOrEmpty(_movieStatus))
+                        {
+                            <button class="movie-detail-status-clear" @onclick="() => SetStatus(null)">сбросить</button>
+                        }
+                    </div>
+                    @if (_statusSending)
+                    {
+                        <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
+                    }
                 </div>
                 <div class="movie-detail-rating-section">
-                    <span class="movie-detail-rating-label">Your Rating</span>
+                    <span class="movie-detail-rating-label">Оценка: </span>
                     @if (_showRatingButtons)
                     {
                         <div class="movie-detail-rating-buttons">
@@ -77,7 +224,7 @@
                     {
                         <div class="movie-detail-rating-display">
                             <span class="movie-detail-rating-value">@_userRating.Value</span>
-                            <button class="movie-detail-rating-change" @onclick="() => _showRatingButtons = true">change</button>
+                            <button class="movie-detail-rating-change" @onclick="() => _showRatingButtons = true">изменить</button>
                         </div>
                     }
                 </div>
@@ -91,16 +238,52 @@
                 </div>
             </div>
             <video id="movie-player" class="movie-detail-player" controls></video>
+
+            @if (_trailers?.Count > 0)
+            {
+                <div class="mt-4">
+                    <MudText Typo="Typo.h5" Class="mb-2">Трейлеры</MudText>
+                    <div class="trailers-grid">
+                        @foreach (var video in _trailers)
+                        {
+                            <div class="trailer-card">
+                                <div class="trailer-embed">
+                                    <iframe src="https://www.youtube.com/embed/@video.Key"
+                                            frameborder="0"
+                                            allowfullscreen
+                                            style="width: 100%; height: 100%; border-radius: 8px;"></iframe>
+                                </div>
+                                <div class="trailer-name">@video.Name</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_backdrops?.Count > 0)
+            {
+                <div class="mt-4">
+                    <MudText Typo="Typo.h5" Class="mb-2">Галерея</MudText>
+                    <div class="gallery-scroll">
+                        @foreach (var img in _backdrops.Take(10))
+                        {
+                            <div class="gallery-item" style="background-image: url('@img.ImageUrl')"
+                                 @onclick="() => OpenGallery(img.ImageUrl)"></div>
+                        }
+                    </div>
+                </div>
+            }
+
             @if (_cast?.Count > 0)
             {
                 <div class="mt-4">
-                    <MudText Typo="Typo.h5" Class="mb-2">Cast</MudText>
+                    <MudText Typo="Typo.h5" Class="mb-2">Актёры</MudText>
                     <div class="carousel-wrapper">
                         <button class="carousel-arrow carousel-arrow-left" onclick="scrollCastCarousel(this.parentElement.querySelector('.cast-carousel'), -1)" type="button">‹</button>
                         <div class="cast-carousel carousel">
                             @foreach (var actor in _cast)
                             {
-                                <div class="cast-card">
+                                <div @onclick="() => GoToPerson(actor.PersonId)" class="cast-card">
                                     <div class="cast-photo" style="background-image: url('@actor.ProfileUrl')"></div>
                                     <div class="cast-name">@actor.OriginalName</div>
                                     <div class="cast-character">@actor.Character</div>
@@ -111,44 +294,240 @@
                     </div>
                 </div>
             }
+            @if (_collection is not null && _collection.Movies?.Count > 1)
+            {
+                <div class="mt-4">
+                    <MudText Typo="Typo.h5" Class="mb-2">@_collection.Name</MudText>
+                    <div class="carousel-wrapper">
+                        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.collection-carousel'), -1)" type="button">‹</button>
+                        <div class="collection-carousel carousel">
+                            @foreach (var movie in _collection.Movies)
+                            {
+                                <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)" />
+                            }
+                        </div>
+                        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.collection-carousel'), 1)" type="button">›</button>
+                    </div>
+                </div>
+            }
             @if (_similarMovies?.Count > 0)
             {
                 <div class="mt-4">
-                    <MudText Typo="Typo.h5" Class="mb-2">Similar Movies</MudText>
+                    <MudText Typo="Typo.h5" Class="mb-2">Похожие фильмы</MudText>
                     <div class="carousel-wrapper">
                         <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.similar-carousel'), -1)" type="button">‹</button>
                         <div class="similar-carousel carousel">
                             @foreach (var movie in _similarMovies)
                             {
-                                <div @onclick="() => GoToMovie(movie.Id)" class="movie-card" style="cursor: pointer">
-                                    <div class="movie-poster" style="background-image: url('@movie.PosterUrl')">
-                                        <div class="movie-rating-badge@(movie.VoteAverage > 7.0 ? " high-rating" : "")">
-                                            @movie.RatingText
-                                        </div>
-                                    </div>
-                                    <div class="movie-title">@movie.Title</div>
-                                </div>
+                                <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)" />
                             }
                         </div>
                         <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.similar-carousel'), 1)" type="button">›</button>
                     </div>
                 </div>
             }
+            @if (_ratingDistribution is not null)
+            {
+                <div class="mt-4">
+                    <MudText Typo="Typo.h5" Class="mb-2">Распределение оценок</MudText>
+                    <div class="rating-distribution">
+                        @for (var r = 10; r >= 1; r--)
+                        {
+                            var maxCount = _ratingDistribution.Values.Max();
+                            var count = _ratingDistribution.GetValueOrDefault(r, 0);
+                            var pct = maxCount > 0 ? (double)count / maxCount * 100 : 0;
+                            <div class="rating-bar-row">
+                                <span class="rating-bar-label">@r</span>
+                                <div class="rating-bar-track">
+                                    <div class="rating-bar-fill" style="width: @pct%"></div>
+                                </div>
+                                <span class="rating-bar-count">@count</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            <div class="mt-4">
+                <MudText Typo="Typo.h5" Class="mb-2">Отзывы</MudText>
+                @if (_reviews?.Count > 0)
+                {
+                    <div class="reviews-list">
+                        @foreach (var review in _reviews)
+                        {
+                            <div class="review-card" id="review-@review.Id">
+                                <div class="review-header">
+                                    <span class="review-author">@(review.Author ?? "Пользователь")</span>
+                                    @if (review.AuthorRating.HasValue)
+                                    {
+                                        <span class="review-rating">@review.AuthorRating.Value/10</span>
+                                    }
+                                    <span class="review-date">@review.CreatedAt?.ToString("dd.MM.yyyy")</span>
+                                    @if (review.UpdatedAt > review.CreatedAt)
+                                    {
+                                        <span class="review-edited">(отредактировано @review.UpdatedAt?.ToString("dd.MM.yyyy"))</span>
+                                    }
+                                </div>
+                                <div class="review-content">@review.Content</div>
+                                <div class="review-actions">
+                                    <button class="review-like-btn@(_reviewLikes.GetValueOrDefault(review.Id)?.UserLike == true ? " liked" : "")"
+                                            @onclick="() => ToggleReviewLike(review.Id, true)">
+                                        <span>👍</span> <span id="likes-@review.Id">@(_reviewLikes.GetValueOrDefault(review.Id)?.Likes ?? 0)</span>
+                                    </button>
+                                    <button class="review-like-btn@(_reviewLikes.GetValueOrDefault(review.Id)?.UserLike == false ? " disliked" : "")"
+                                            @onclick="() => ToggleReviewLike(review.Id, false)">
+                                        <span>👎</span> <span id="dislikes-@review.Id">@(_reviewLikes.GetValueOrDefault(review.Id)?.Dislikes ?? 0)</span>
+                                    </button>
+                                    <button class="review-comment-toggle" @onclick="() => ToggleComments(review.Id)">
+                                        💬 (@(_reviewComments.GetValueOrDefault(review.Id)?.Count ?? 0))
+                                    </button>
+                                </div>
+                                @if (_expandedComments.Contains(review.Id))
+                                {
+                                    <div class="review-comments">
+                                        @foreach (var comment in _reviewComments.GetValueOrDefault(review.Id) ?? [])
+                                        {
+                                            <div class="review-comment">
+                                                <span class="review-comment-author">@comment.AuthorName</span>
+                                                <span class="review-comment-text">@comment.Content</span>
+                                                <span class="review-comment-date">@comment.CreatedAt.ToString("dd.MM.yyyy")</span>
+                                            </div>
+                                        }
+                                        <div class="review-comment-form">
+                                            <input type="text" class="review-comment-input" placeholder="Написать комментарий..."
+                                                   value="@(_commentTexts.GetValueOrDefault(review.Id) ?? "")"
+                                                   @oninput="@((ChangeEventArgs e) => HandleCommentInput(review.Id, e))"
+                                                   @onkeydown="@(async (KeyboardEventArgs e) => { if (e.Key == "Enter") { await SubmitComment(review.Id); } })" />
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p style="opacity: 0.5; font-size: 0.9rem;">Отзывов пока нет. Будьте первым!</p>
+                }
+                @if (_showReviewForm)
+                {
+                    <div class="review-form mt-2">
+                        <MudTextField @bind-Value="_reviewContent"
+                                      T="string"
+                                      Placeholder="Напишите ваш отзыв..."
+                                      Variant="Variant.Outlined"
+                                      Lines="4"
+                                      MaxLength="2000"
+                                      Class="mb-2" />
+                        <div class="review-form-actions">
+                            <span class="movie-detail-rating-label" style="margin-right: 8px;">Оценка:</span>
+                            <div class="movie-detail-rating-buttons" style="display: inline-flex;">
+                                @for (var i = 1; i <= 10; i++)
+                                {
+                                    var idx = i;
+                                    <button class="movie-detail-rate-btn@(_reviewRating == idx ? " selected" : "")"
+                                            @onclick="() => _reviewRating = idx"
+                                            style="width: 28px; height: 28px; font-size: 0.7rem;">
+                                        @idx
+                                    </button>
+                                }
+                            </div>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                       OnClick="@SubmitReview"
+                                       Disabled="@_reviewSending"
+                                       Class="ml-4">
+                                Отправить
+                            </MudButton>
+                            <MudButton Variant="Variant.Text"
+                                       OnClick="() => _showReviewForm = false"
+                                       Class="ml-2">
+                                Отмена
+                            </MudButton>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               OnClick="@ShowReviewForm"
+                               Class="mt-2">
+                        @(_hasReview ? "Редактировать отзыв" : "Написать отзыв")
+                    </MudButton>
+                }
+            </div>
         </div>
     }
 </div>
+
+@if (!string.IsNullOrEmpty(_galleryImage))
+{
+    <div class="gallery-overlay" @onclick="CloseGallery">
+        <img src="@_galleryImage" class="gallery-full" @onclick:stopPropagation />
+        <button class="gallery-close" @onclick="CloseGallery">×</button>
+    </div>
+}
 
 @code {
     [Parameter] public int MovieId { get; set; }
 
     private MovieDto? _movie;
     private List<CastDto>? _cast;
+    private List<CrewDto> _crew = [];
     private List<MovieDto>? _similarMovies;
+    private CollectionDto? _collection;
+    private List<VideoDto>? _trailers;
+    private List<ImageDto>? _backdrops;
     private bool _expanded;
     private bool _dataLoading = true;
     private int? _userRating;
     private bool _ratingSending;
     private bool _showRatingButtons = true;
+    private string? _movieStatus;
+    private bool _statusSending;
+    private readonly string[] _statuses = ["watching", "planned", "watched", "dropped"];
+    private Dictionary<int, UserMovieStatusDto> _userStatuses = [];
+    private List<ReviewDto>? _reviews;
+    private Dictionary<int, int>? _ratingDistribution;
+    private bool _showReviewForm;
+    private string _reviewContent = "";
+    private int? _reviewRating;
+    private bool _reviewSending;
+    private string? _editingReviewId;
+    private bool _hasReview;
+    private HashSet<string> _expandedComments = [];
+    private Dictionary<string, List<ReviewCommentDto>> _reviewComments = [];
+    private Dictionary<string, ReviewLikesDto> _reviewLikes = [];
+    private Dictionary<string, string> _commentTexts = [];
+    private string? _galleryImage;
+
+    private static string StatusDisplayText(string status) => status switch
+    {
+        "watching" => "Смотрю",
+        "planned" => "Запланировано",
+        "watched" => "Просмотрено",
+        "dropped" => "Брошено",
+        _ => status
+    };
+
+    private bool _showAllCrew;
+
+    private List<CrewDto> _directors => _crew.Where(c => c.Job == "Director").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _writers => _crew.Where(c => c.Job == "Writer" || c.Job == "Story").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _producers => _crew.Where(c => c.Job == "Producer").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _composers => _crew.Where(c => c.Job == "Original Music Composer").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _artDirectors => _crew.Where(c => c.Job == "Art Direction").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _editors => _crew.Where(c => c.Job == "Editor").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _directorsOfPhotography => _crew.Where(c => c.Job == "Director of Photography").DistinctBy(c => c.PersonId).ToList();
+
+    private List<CrewDto> _screenplay => _crew.Where(c => c.Job == "Screenplay").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _executiveProducers => _crew.Where(c => c.Job == "Executive Producer").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _coProducers => _crew.Where(c => c.Job == "Co-Producer").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _productionDesign => _crew.Where(c => c.Job == "Production Design").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _costumeDesign => _crew.Where(c => c.Job == "Costume Design").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _visualEffects => _crew.Where(c => c.Job is "Visual Effects Supervisor" or "VFX Supervisor").DistinctBy(c => c.PersonId).ToList();
+    private List<CrewDto> _novel => _crew.Where(c => c.Job == "Novel").DistinctBy(c => c.PersonId).ToList();
+
+    private bool _crewHasMore => _screenplay.Count > 0 || _executiveProducers.Count > 0 || _coProducers.Count > 0
+        || _productionDesign.Count > 0 || _costumeDesign.Count > 0 || _visualEffects.Count > 0 || _novel.Count > 0;
 
     private const int OverviewLimit = 250;
 
@@ -166,6 +545,28 @@
         _expanded = !_expanded;
     }
 
+    private async Task SetStatus(string? status)
+    {
+        if (_statusSending) return;
+        _statusSending = true;
+        _movieStatus = status;
+        try
+        {
+            await Catalog.SetMovieStatusAsync(MovieId, status ?? "");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        catch { _movieStatus = _movieStatus == status ? null : _movieStatus; }
+        _statusSending = false;
+        if (status is not null)
+            await JS.InvokeVoidAsync("showToast", $"Помечено: {status}");
+        else
+            await JS.InvokeVoidAsync("showToast", "Статус сброшен");
+    }
+
     private async Task RateMovie(int rating)
     {
         if (_ratingSending) return;
@@ -175,6 +576,7 @@
         {
             await Catalog.RateMovieAsync(MovieId, rating);
             _showRatingButtons = false;
+            await JS.InvokeVoidAsync("showToast", $"Оценено: {rating}/10");
         }
         catch (UnauthorizedAccessException)
         {
@@ -188,10 +590,120 @@
         _ratingSending = false;
     }
 
-    private void GoToMovie(int id)
+    private void GoToPerson(int personId)
     {
-        Navigation.NavigateTo($"/movie/{id}");
+        Navigation.NavigateTo($"/person/{personId}");
     }
+
+    private async Task SubmitReview()
+    {
+        if (string.IsNullOrWhiteSpace(_reviewContent)) return;
+        _reviewSending = true;
+        try
+        {
+            await Catalog.AddMovieReviewAsync(MovieId, _reviewContent, _reviewRating);
+            await JS.InvokeVoidAsync("showToast", _editingReviewId is not null ? "Отзыв обновлён" : "Отзыв добавлен");
+            _reviewContent = "";
+            _reviewRating = null;
+            _showReviewForm = false;
+            _editingReviewId = null;
+            _reviews = await Catalog.GetMovieReviewsAsync(MovieId);
+            _hasReview = true;
+            await LoadReviewLikesAndComments();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        _reviewSending = false;
+    }
+
+    private async Task ShowReviewForm()
+    {
+        _showReviewForm = true;
+        if (_hasReview)
+        {
+            var myReview = await Catalog.GetMyReviewAsync(MovieId);
+            if (myReview is not null)
+            {
+                _reviewContent = myReview.Content ?? "";
+                _reviewRating = (int?)myReview.AuthorRating;
+                _editingReviewId = myReview.Id;
+            }
+        }
+    }
+
+    private async Task ToggleReviewLike(string reviewId, bool isPositive)
+    {
+        var current = _reviewLikes.GetValueOrDefault(reviewId);
+        if (current?.UserLike == isPositive)
+        {
+            await Catalog.RemoveReviewLikeAsync(MovieId, reviewId);
+        }
+        else
+        {
+            await Catalog.AddReviewLikeAsync(MovieId, reviewId, isPositive);
+        }
+        await LoadReviewLikesAndComments();
+    }
+
+    private async Task ToggleComments(string reviewId)
+    {
+        if (_expandedComments.Contains(reviewId))
+        {
+            _expandedComments.Remove(reviewId);
+        }
+        else
+        {
+            _expandedComments.Add(reviewId);
+            if (!_reviewComments.ContainsKey(reviewId))
+            {
+                var comments = await Catalog.GetReviewCommentsAsync(MovieId, reviewId);
+                _reviewComments[reviewId] = comments;
+            }
+        }
+    }
+
+    private async Task SubmitComment(string reviewId)
+    {
+        var text = _commentTexts.GetValueOrDefault(reviewId) ?? "";
+        if (string.IsNullOrWhiteSpace(text)) return;
+        var comments = await Catalog.AddReviewCommentAsync(MovieId, reviewId, text);
+        _reviewComments[reviewId] = comments;
+        _commentTexts[reviewId] = "";
+    }
+
+    private void HandleCommentInput(string reviewId, ChangeEventArgs e)
+    {
+        _commentTexts[reviewId] = e?.Value?.ToString() ?? "";
+    }
+
+    private async Task LoadReviewLikesAndComments()
+    {
+        if (_reviews is null) return;
+        foreach (var review in _reviews)
+        {
+            var likes = await Catalog.GetReviewLikesAsync(MovieId, review.Id);
+            if (likes is not null)
+                _reviewLikes[review.Id] = likes;
+            var comments = await Catalog.GetReviewCommentsAsync(MovieId, review.Id);
+            _reviewComments[review.Id] = comments;
+        }
+    }
+
+    private void OpenGallery(string url)
+    {
+        _galleryImage = url;
+    }
+
+    private void CloseGallery()
+    {
+        _galleryImage = null;
+    }
+
+    private bool _initialized;
+    private int _prevMovieId;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -204,33 +716,97 @@
             return;
         }
 
+        _initialized = true;
+        _prevMovieId = MovieId;
+        await LoadMovieData();
+        await JS.InvokeVoidAsync("initMoviePlayer");
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialized || MovieId == _prevMovieId) return;
+        _prevMovieId = MovieId;
+        await LoadMovieData();
+    }
+
+    private async Task LoadMovieData()
+    {
+        _dataLoading = true;
+        _movie = null;
+        _cast = null;
+        _crew = [];
+        _similarMovies = null;
+        _collection = null;
+        _trailers = null;
+        _backdrops = null;
+        _userRating = null;
+        _movieStatus = null;
+        _showRatingButtons = true;
+        _reviews = null;
+        _ratingDistribution = null;
+        _showReviewForm = false;
+        _reviewContent = "";
+        _reviewRating = null;
+        _hasReview = false;
+        _editingReviewId = null;
+        _reviewComments = [];
+        _reviewLikes = [];
+        _commentTexts = [];
+        _expandedComments = [];
+        StateHasChanged();
+
         try
         {
             var movieTask = Catalog.GetByIdAsync(MovieId);
             var castTask = Catalog.GetCreditsAsync(MovieId);
+            var crewTask = Catalog.GetCrewAsync(MovieId);
             var similarTask = Catalog.GetSimilarAsync(MovieId);
-            var ratingTask = Catalog.GetUserRatingAsync(MovieId);
-            await Task.WhenAll(movieTask, castTask, similarTask, ratingTask);
+            var statusTask = Catalog.GetUserMovieStatusAsync(MovieId);
+            var collectionTask = Catalog.GetCollectionAsync(MovieId);
+            var reviewsTask = Catalog.GetMovieReviewsAsync(MovieId);
+            var ratingDistTask = Catalog.GetMovieRatingDistributionAsync(MovieId);
+            var videosTask = Catalog.GetMovieVideosAsync(MovieId);
+            await Task.WhenAll(movieTask, castTask, crewTask, similarTask, statusTask, collectionTask, reviewsTask, ratingDistTask, videosTask);
             _movie = movieTask.Result;
             _cast = castTask.Result;
+            _crew = crewTask.Result;
             _similarMovies = similarTask.Result;
+            _collection = collectionTask.Result;
+            _reviews = reviewsTask.Result;
+            _ratingDistribution = ratingDistTask.Result;
+            _trailers = videosTask.Result?.Where(v => v.Site == "YouTube" && v.Type == "Trailer").Take(4).ToList();
+            _backdrops = _movie?.Images?.Where(i => i.Type == "backdrop").ToList();
+
+            _hasReview = false;
+            _editingReviewId = null;
+            var myReview = await Catalog.GetMyReviewAsync(MovieId);
+            _hasReview = myReview is not null;
             _dataLoading = false;
 
-            var existingRating = ratingTask.Result;
+            var (existingRating, existingStatus) = statusTask.Result;
             if (existingRating.HasValue)
             {
                 _userRating = existingRating.Value;
                 _showRatingButtons = false;
             }
+            _movieStatus = existingStatus;
+
+            var allIds = new List<int>();
+            if (_collection?.Movies?.Count > 0)
+                allIds.AddRange(_collection.Movies.Select(m => m.Id));
+            if (_similarMovies?.Count > 0)
+                allIds.AddRange(_similarMovies.Select(m => m.Id));
+            if (allIds.Count > 0)
+                _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(allIds.Distinct().ToList());
+
+            if (_reviews?.Count > 0)
+                await LoadReviewLikesAndComments();
 
             StateHasChanged();
         }
         catch (UnauthorizedAccessException)
         {
             Navigation.NavigateTo("/login");
-            return;
         }
-
-        await JS.InvokeVoidAsync("initMoviePlayer");
     }
 }

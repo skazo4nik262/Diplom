@@ -1,0 +1,163 @@
+@page "/person/{PersonId:int}"
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="person-page mt-4">
+    @if (_person is null)
+    {
+        <div class="d-flex justify-center mt-16">
+            <MudProgressCircular Indeterminate Size="Size.Large" />
+        </div>
+    }
+    else
+    {
+        <div class="person-header">
+            <div class="person-photo" style="background-image: url('@_person.ProfileUrl')"></div>
+            <div class="person-info">
+                <h1 class="person-name">@_person.Name</h1>
+                @if (!string.IsNullOrEmpty(_person.KnownForDepartment))
+                {
+                    <div class="person-department">@_person.KnownForDepartment</div>
+                }
+                <div class="person-meta">
+                    @if (!string.IsNullOrEmpty(_person.BirthYear))
+                    {
+                        <span>Родился @_person.BirthYear</span>
+                    }
+                    @if (_person.IsDead)
+                    {
+                        <span>Умер @_person.Deathday?.Year</span>
+                    }
+                    @if (!string.IsNullOrEmpty(_person.PlaceOfBirth))
+                    {
+                        <span>@_person.PlaceOfBirth</span>
+                    }
+                </div>
+                @if (!string.IsNullOrEmpty(_person.Biography))
+                {
+                    <div class="person-biography">
+                        <span>@(_expanded ? _person.Biography : (_person.Biography.Length > 400 ? _person.Biography[..400] + "..." : _person.Biography))</span>
+                        @if (_person.Biography.Length > 400)
+                        {
+                            <button class="movie-detail-expand-btn" @onclick="() => _expanded = !_expanded">
+                                @(_expanded ? "свернуть" : "развернуть")
+                            </button>
+                        }
+                    </div>
+                }
+                @if (_person.ExternalIds is not null || !string.IsNullOrEmpty(_person.Homepage))
+                {
+                    <div class="person-links mt-2">
+                        @if (!string.IsNullOrEmpty(_person.Homepage))
+                        {
+                            <a href="@_person.Homepage" target="_blank" class="person-link" title="Сайт">🌐</a>
+                        }
+                        @if (_person.ExternalIds?.FacebookId is not null)
+                        {
+                            <a href="https://facebook.com/@_person.ExternalIds.FacebookId" target="_blank" class="person-link" title="Facebook">FB</a>
+                        }
+                        @if (_person.ExternalIds?.TwitterId is not null)
+                        {
+                            <a href="https://twitter.com/@_person.ExternalIds.TwitterId" target="_blank" class="person-link" title="Twitter">X</a>
+                        }
+                        @if (_person.ExternalIds?.InstagramId is not null)
+                        {
+                            <a href="https://instagram.com/@_person.ExternalIds.InstagramId" target="_blank" class="person-link" title="Instagram">IG</a>
+                        }
+                        @if (_person.ExternalIds?.WikidataId is not null)
+                        {
+                            <a href="https://www.wikidata.org/wiki/@_person.ExternalIds.WikidataId" target="_blank" class="person-link" title="Wikidata">WD</a>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+        @if (_knownForMovies.Count > 0)
+        {
+            <div class="mt-4">
+                <MudText Typo="Typo.h5" Class="mb-2">Известен по</MudText>
+                <div class="carousel-wrapper">
+                    <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.known-for-carousel'), -1)" type="button">‹</button>
+                    <div class="known-for-carousel carousel">
+                        @foreach (var movie in _knownForMovies)
+                        {
+                            <MovieCard Movie="movie" />
+                        }
+                    </div>
+                    <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.known-for-carousel'), 1)" type="button">›</button>
+                </div>
+            </div>
+        }
+        @if (_movies.Count > 0)
+        {
+            <div class="mt-4">
+                <MudText Typo="Typo.h5" Class="mb-2">Фильмография</MudText>
+                <div class="carousel-wrapper">
+                    <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.person-movies-carousel'), -1)" type="button">‹</button>
+                    <div class="person-movies-carousel carousel">
+                        @foreach (var movie in _movies)
+                        {
+                            <MovieCard Movie="movie" />
+                        }
+                    </div>
+                    <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.person-movies-carousel'), 1)" type="button">›</button>
+                </div>
+                @if (_hasMoreMovies)
+                {
+                    <div class="d-flex justify-center mt-2 mb-4">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" @onclick="LoadMoreMovies">Загрузить ещё</MudButton>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public int PersonId { get; set; }
+
+    private PersonDto? _person;
+    private List<MovieDto> _movies = [];
+    private List<MovieDto> _knownForMovies = [];
+    private bool _expanded;
+    private int _page = 1;
+    private bool _hasMoreMovies = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        _person = await Catalog.GetPersonAsync(PersonId);
+        if (_person is null)
+        {
+            Navigation.NavigateTo("/notfound");
+            return;
+        }
+
+        _knownForMovies = await Catalog.GetKnownForMoviesAsync(PersonId);
+        _movies = await Catalog.GetPersonMoviesAsync(PersonId);
+        _hasMoreMovies = _movies.Count > 0;
+        StateHasChanged();
+    }
+
+    private async Task LoadMoreMovies()
+    {
+        _page++;
+        var newMovies = await Catalog.GetPersonMoviesAsync(PersonId, _page);
+        if (newMovies.Count == 0)
+            _hasMoreMovies = false;
+        else
+            _movies.AddRange(newMovies);
+        StateHasChanged();
+    }
+}

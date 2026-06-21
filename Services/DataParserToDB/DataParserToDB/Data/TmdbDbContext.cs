@@ -23,6 +23,8 @@ public class TmdbDbContext : DbContext
     public DbSet<AlternativeTitleEntity> AlternativeTitles => Set<AlternativeTitleEntity>();
     public DbSet<ReleaseDateEntity> ReleaseDates => Set<ReleaseDateEntity>();
     public DbSet<ReviewEntity> Reviews => Set<ReviewEntity>();
+    public DbSet<ReviewCommentEntity> ReviewComments => Set<ReviewCommentEntity>();
+    public DbSet<ReviewLikeEntity> ReviewLikes => Set<ReviewLikeEntity>();
     public DbSet<ImageDataEntity> Images => Set<ImageDataEntity>();
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<UserMovieEntity> UserMovies => Set<UserMovieEntity>();
@@ -345,8 +347,25 @@ public class TmdbDbContext : DbContext
             entity.Property(e => e.MediaTitle).IsUnicode().HasMaxLength(1000);
             entity.Property(e => e.MediaType).HasMaxLength(500);
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(e => e.Comments).WithOne(c => c.Review).HasForeignKey(c => c.ReviewId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(e => e.Likes).WithOne(l => l.Review).HasForeignKey(l => l.ReviewId).OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.MovieId);
+        });
+
+        modelBuilder.Entity<ReviewCommentEntity>(entity =>
+        {
+            entity.ToTable("ReviewComments");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Content).IsUnicode().HasMaxLength(2000);
+            entity.Property(e => e.AuthorName).HasMaxLength(255);
+            entity.HasIndex(e => e.ReviewId);
+        });
+
+        modelBuilder.Entity<ReviewLikeEntity>(entity =>
+        {
+            entity.ToTable("ReviewLikes");
+            entity.HasKey(e => new { e.ReviewId, e.UserId });
         });
 
         modelBuilder.Entity<ImageDataEntity>(entity =>
@@ -368,6 +387,9 @@ public class TmdbDbContext : DbContext
             entity.ToTable("Users");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Login).HasMaxLength(255);
+            entity.Property(e => e.Username).HasMaxLength(255);
+            entity.Property(e => e.Bio).HasMaxLength(1000);
+            entity.Property(e => e.AvatarUrl).HasMaxLength(500);
             entity.Property(e => e.PasswordHash).HasColumnName("user_password").HasMaxLength(500);
             entity.Property(e => e.Role).HasColumnName("user_role").HasDefaultValue(1);
             entity.Property(e => e.IsActive).HasDefaultValue(true);

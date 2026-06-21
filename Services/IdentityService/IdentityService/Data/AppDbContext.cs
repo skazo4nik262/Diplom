@@ -16,6 +16,9 @@ namespace IdentityService.Data
 				entity.HasKey(e => e.Id);
 				entity.ToTable("Users");
 				entity.Property(e => e.Login).HasMaxLength(255);
+				entity.Property(e => e.Username).HasMaxLength(255);
+				entity.Property(e => e.Bio).HasMaxLength(1000);
+				entity.Property(e => e.AvatarUrl).HasMaxLength(500);
 				entity.Property(e => e.PasswordHash).HasColumnName("user_password").HasMaxLength(500);
 				entity.Property(e => e.Role).HasColumnName("user_role").HasDefaultValue(1);
 				entity.Property(e => e.IsActive).HasDefaultValue(true);

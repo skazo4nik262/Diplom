@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace CatalogService.Data.Entities;
 
 public class CollectionEntity
@@ -10,6 +8,5 @@ public class CollectionEntity
     public string? PosterPath { get; set; }
     public string? BackdropPath { get; set; }
 
-    [JsonIgnore]
     public ICollection<MovieEntity> Movies { get; set; } = new List<MovieEntity>();
 }

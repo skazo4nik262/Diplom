@@ -168,7 +168,7 @@ public static class MovieMapper
                 Adult = cast.Adult,
                 Gender = cast.Gender.ToString(),
                 KnownForDepartment = cast.KnownForDepartment,
-                OriginalName = cast.OriginalName,
+                OriginalName = cast.Name ?? cast.OriginalName,
                 Popularity = cast.Popularity,
                 ProfilePath = cast.ProfilePath,
             });
@@ -194,7 +194,7 @@ public static class MovieMapper
                 Adult = crew.Adult,
                 Gender = crew.Gender.ToString(),
                 KnownForDepartment = crew.KnownForDepartment,
-                OriginalName = crew.OriginalName,
+                OriginalName = crew.Name ?? crew.OriginalName,
                 Popularity = crew.Popularity,
                 ProfilePath = crew.ProfilePath,
             });

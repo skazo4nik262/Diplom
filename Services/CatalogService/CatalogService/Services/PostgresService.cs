@@ -61,14 +61,57 @@ namespace CatalogService.Services
                 .ToListAsync();
         }
 
-        public async Task<List<MovieEntity>> SearchMoviesAsync(string query, int page)
+        public async Task<List<MovieEntity>> SearchMoviesAsync(string query, int page, List<int>? genreIds = null,
+            int? yearFrom = null, int? yearTo = null, double? ratingFrom = null, double? ratingTo = null,
+            int? runtimeFrom = null, int? runtimeTo = null, string? sortBy = null, string? sortOrder = null)
         {
-            return await _db.Movies
+            var baseQuery = _db.Movies
                 .Include(m => m.Collection)
                 .Include(m => m.Genres)
-                .Where(m => m.Title != null && EF.Functions.ILike(m.Title, $"%{query}%")
-                         || m.OriginalTitle != null && EF.Functions.ILike(m.OriginalTitle, $"%{query}%"))
-                .OrderByDescending(m => m.Popularity)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                baseQuery = baseQuery.Where(m => m.Title != null && EF.Functions.ILike(m.Title, $"%{query}%")
+                                             || m.OriginalTitle != null && EF.Functions.ILike(m.OriginalTitle, $"%{query}%"));
+            }
+
+            if (genreIds?.Count > 0)
+                baseQuery = baseQuery.Where(m => m.Genres.Any(g => genreIds.Contains(g.Id)));
+
+            if (yearFrom.HasValue)
+            {
+                var from = new DateTime(yearFrom.Value, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                baseQuery = baseQuery.Where(m => m.ReleaseDate >= from);
+            }
+            if (yearTo.HasValue)
+            {
+                var to = new DateTime(yearTo.Value, 12, 31, 23, 59, 59, DateTimeKind.Utc);
+                baseQuery = baseQuery.Where(m => m.ReleaseDate <= to);
+            }
+            if (ratingFrom.HasValue)
+                baseQuery = baseQuery.Where(m => m.VoteAverage >= ratingFrom.Value);
+            if (ratingTo.HasValue)
+                baseQuery = baseQuery.Where(m => m.VoteAverage <= ratingTo.Value);
+            if (runtimeFrom.HasValue)
+                baseQuery = baseQuery.Where(m => m.Runtime >= runtimeFrom.Value);
+            if (runtimeTo.HasValue)
+                baseQuery = baseQuery.Where(m => m.Runtime <= runtimeTo.Value);
+
+            baseQuery = (sortBy?.ToLower(), sortOrder?.ToLower()) switch
+            {
+                ("rating", "asc") => baseQuery.OrderBy(m => m.VoteAverage),
+                ("rating", _) => baseQuery.OrderByDescending(m => m.VoteAverage),
+                ("year", "asc") => baseQuery.OrderBy(m => m.ReleaseDate),
+                ("year", _) => baseQuery.OrderByDescending(m => m.ReleaseDate),
+                ("title", "asc") => baseQuery.OrderBy(m => m.Title),
+                ("title", _) => baseQuery.OrderByDescending(m => m.Title),
+                ("runtime", "asc") => baseQuery.OrderBy(m => m.Runtime),
+                ("runtime", _) => baseQuery.OrderByDescending(m => m.Runtime),
+                _ => baseQuery.OrderByDescending(m => m.Popularity)
+            };
+
+            return await baseQuery
                 .Skip((page - 1) * PageSize)
                 .Take(PageSize)
                 .ToListAsync();
@@ -208,6 +251,27 @@ namespace CatalogService.Services
             _db.Reviews.Add(review);
             await _db.SaveChangesAsync();
         }
+        public async Task<ReviewEntity?> GetUserMovieReviewAsync(Guid userId, int tmdbId)
+        {
+            return await _db.Reviews
+                .FirstOrDefaultAsync(r => r.UserId == userId && r.MovieId == tmdbId);
+        }
+        public async Task UpdateReviewAsync(ReviewEntity review)
+        {
+            var existing = await _db.Reviews.FindAsync(review.Id);
+            if (existing is null) return;
+            existing.Content = review.Content;
+            existing.AuthorRating = review.AuthorRating;
+            existing.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+        public async Task<string?> GetUserLoginAsync(Guid userId)
+        {
+            return await _db.Users
+                .Where(u => u.Id == userId)
+                .Select(u => u.Login)
+                .FirstOrDefaultAsync();
+        }
         public async Task AddPlaylistAsync(Guid userId, string name, string? description, IEnumerable<int> tmdbIds)
         {
             var playlist = new UserPlaylistEntity
@@ -265,6 +329,8 @@ namespace CatalogService.Services
         public async Task<CollectionEntity?> GetCollectionAsync(int collectionId)
         {
             return await _db.Collections
+                .Include(c => c.Movies)
+                .ThenInclude(m => m.Genres)
                 .FirstOrDefaultAsync(c => c.Id == collectionId);
         }
 
@@ -285,10 +351,17 @@ namespace CatalogService.Services
 
         public async Task<CollectionEntity?> GetMovieCollectionAsync(int tmdbId)
         {
-            return await _db.Movies
+            var collectionId = await _db.Movies
                 .Where(m => m.Id == tmdbId)
-                .Select(m => m.Collection)
+                .Select(m => m.BelongsToCollectionId)
                 .FirstOrDefaultAsync();
+
+            if (collectionId is null) return null;
+
+            return await _db.Collections
+                .Include(c => c.Movies)
+                .ThenInclude(m => m.Genres)
+                .FirstOrDefaultAsync(c => c.Id == collectionId.Value);
         }
 
         public async Task<List<MovieCrewEntity>> GetMovieCrewAsync(int tmdbId)
@@ -297,6 +370,27 @@ namespace CatalogService.Services
                 .Include(c => c.Person)
                 .Where(c => c.MovieId == tmdbId)
                 .ToListAsync();
+        }
+
+        public async Task<List<MovieEntity>> GetPersonMoviesAsync(int personId, int page)
+        {
+            var movieIds = await _db.MovieCast
+                .Where(c => c.PersonId == personId)
+                .Select(c => c.MovieId)
+                .Distinct()
+                .Skip((page - 1) * PageSize)
+                .Take(PageSize)
+                .ToListAsync();
+
+            if (movieIds.Count == 0) return [];
+
+            var movies = await _db.Movies
+                .Include(m => m.Collection)
+                .Include(m => m.Genres)
+                .Where(m => movieIds.Contains(m.Id))
+                .ToListAsync();
+
+            return movieIds.Select(id => movies.First(m => m.Id == id)).ToList();
         }
 
         public async Task<List<PersonEntity>> GetPeopleBatchAsync(IEnumerable<int> personIds)
@@ -364,13 +458,41 @@ namespace CatalogService.Services
         }
         public async Task<List<MovieEntity>> GetTopRatedMoviesAsync(int page)
         {
+            const int minVotes = 50;
             return await _db.Movies
                 .Include(m => m.Collection)
                 .Include(m => m.Genres)
+                .Where(m => m.VoteCount >= minVotes)
                 .OrderByDescending(m => m.VoteAverage)
+                .ThenByDescending(m => m.VoteCount)
                 .Skip((page - 1) * PageSize)
                 .Take(PageSize)
                 .ToListAsync();
+        }
+
+        public async Task<List<MovieEntity>> GetTrendingMoviesAsync(int page)
+        {
+            var cutoff = DateTime.UtcNow.AddYears(-5);
+            return await _db.Movies
+                .Include(m => m.Collection)
+                .Include(m => m.Genres)
+                .Where(m => m.ReleaseDate >= cutoff)
+                .OrderByDescending(m => m.Popularity)
+                .Skip((page - 1) * PageSize)
+                .Take(PageSize)
+                .ToListAsync();
+        }
+
+        public async Task<Dictionary<int, (int? Rating, string? Status)>> GetUserMoviesStatusBatchAsync(Guid userId, List<int> movieIds)
+        {
+            if (movieIds.Count == 0) return [];
+
+            var entries = await _db.UserMovies
+                .Where(u => u.UserId == userId && movieIds.Contains(u.MovieId))
+                .Select(u => new { u.MovieId, u.Rating, u.Status })
+                .ToListAsync();
+
+            return entries.ToDictionary(e => e.MovieId, e => (e.Rating, e.Status));
         }
         public async Task<List<MovieEntity>> GetUserTasteAsync(Guid userId, int page)
         {
@@ -420,12 +542,13 @@ namespace CatalogService.Services
             await _db.SaveChangesAsync();
         }
 
-        public async Task<int?> GetUserMovieRatingAsync(Guid userId, int tmdbId)
+        public async Task<(int? Rating, string? Status)> GetUserMovieStatusAsync(Guid userId, int tmdbId)
         {
-            return await _db.UserMovies
+            var entity = await _db.UserMovies
                 .Where(u => u.UserId == userId && u.MovieId == tmdbId)
-                .Select(u => u.Rating)
+                .Select(u => new { u.Rating, u.Status })
                 .FirstOrDefaultAsync();
+            return (entity?.Rating, entity?.Status);
         }
 
         public async Task RemoveMovie(int tmdbId)
@@ -531,6 +654,61 @@ namespace CatalogService.Services
             }
             await _db.SaveChangesAsync();
         }
+
+        public async Task<List<ReviewEntity>> GetMovieReviewsAsync(int tmdbId)
+        {
+            return await _db.Reviews
+                .Where(r => r.MovieId == tmdbId)
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<Dictionary<int, int>> GetMovieRatingDistributionAsync(int tmdbId)
+        {
+            var distribution = await _db.UserMovies
+                .Where(u => u.MovieId == tmdbId && u.Rating.HasValue)
+                .GroupBy(u => u.Rating!.Value)
+                .Select(g => new { Rating = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            var result = new Dictionary<int, int>();
+            for (int r = 1; r <= 10; r++)
+                result[r] = 0;
+            foreach (var entry in distribution)
+                result[entry.Rating] = entry.Count;
+            return result;
+        }
+
+        public async Task<List<MovieEntity>> GetKnownForMoviesAsync(int personId)
+        {
+            var movieIds = await _db.MovieCast
+                .Where(c => c.PersonId == personId)
+                .OrderBy(c => c.Order)
+                .Select(c => c.MovieId)
+                .Distinct()
+                .Take(10)
+                .ToListAsync();
+
+            if (movieIds.Count == 0) return [];
+
+            var movies = await _db.Movies
+                .Include(m => m.Collection)
+                .Include(m => m.Genres)
+                .Where(m => movieIds.Contains(m.Id))
+                .ToListAsync();
+
+            return movieIds.Select(id => movies.First(m => m.Id == id)).ToList();
+        }
+
+        public async Task RemoveReviewAsync(string reviewId)
+        {
+            var review = await _db.Reviews.FindAsync(reviewId);
+            if (review is not null)
+            {
+                _db.Reviews.Remove(review);
+                await _db.SaveChangesAsync();
+            }
+        }
         public async Task UpdateCollection(CollectionEntity collection)
         {
             var existing = await _db.Collections.FindAsync(collection.Id);
@@ -635,7 +813,139 @@ namespace CatalogService.Services
 
             return paged.Select(id => movies.First(m => m.Id == id)).ToList();
         }
+
+        public async Task<List<VideoEntity>> GetMovieVideosAsync(int tmdbId)
+        {
+            return await _db.Videos
+                .Where(v => v.MovieId == tmdbId)
+                .OrderByDescending(v => v.PublishedAt)
+                .ToListAsync();
+        }
+
+        public async Task<List<ImageDataEntity>> GetMovieImagesAsync(int tmdbId, string? type = null)
+        {
+            var query = _db.Images.Where(i => i.MovieId == tmdbId);
+            if (!string.IsNullOrEmpty(type))
+                query = query.Where(i => i.Type == type);
+            return await query
+                .OrderByDescending(i => i.VoteCount)
+                .ToListAsync();
+        }
+
+        public async Task DeletePlaylistAsync(int playlistId)
+        {
+            var playlist = await _db.UserPlaylists.FindAsync(playlistId);
+            if (playlist is not null)
+            {
+                _db.UserPlaylists.Remove(playlist);
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task UpdatePlaylistAsync(int playlistId, string name, string? description)
+        {
+            var playlist = await _db.UserPlaylists.FindAsync(playlistId);
+            if (playlist is null) return;
+            playlist.Name = name;
+            playlist.Description = description;
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task<UserEntity?> GetUserByIdAsync(Guid userId)
+        {
+            return await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        public async Task<List<ReviewEntity>> GetUserReviewsAsync(Guid userId, int page = 1)
+        {
+            return await _db.Reviews
+                .Where(r => r.UserId == userId)
+                .OrderByDescending(r => r.CreatedAt)
+                .Skip((page - 1) * PageSize)
+                .Take(PageSize)
+                .ToListAsync();
+        }
+
+        public async Task<List<UserMovieEntity>> GetUserMoviesAllAsync(Guid userId)
+        {
+            return await _db.UserMovies
+                .Include(u => u.Movie)
+                .ThenInclude(m => m.Genres)
+                .Where(u => u.UserId == userId)
+                .ToListAsync();
+        }
+
+        public async Task AddReviewCommentAsync(string reviewId, Guid userId, string authorName, string content)
+        {
+            _db.ReviewComments.Add(new ReviewCommentEntity
+            {
+                ReviewId = reviewId,
+                UserId = userId,
+                AuthorName = authorName,
+                Content = content,
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task<List<ReviewCommentEntity>> GetReviewCommentsAsync(string reviewId)
+        {
+            return await _db.ReviewComments
+                .Where(c => c.ReviewId == reviewId)
+                .OrderBy(c => c.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task AddOrUpdateReviewLikeAsync(string reviewId, Guid userId, bool isPositive)
+        {
+            var existing = await _db.ReviewLikes
+                .FirstOrDefaultAsync(l => l.ReviewId == reviewId && l.UserId == userId);
+            if (existing is not null)
+            {
+                existing.IsPositive = isPositive;
+            }
+            else
+            {
+                _db.ReviewLikes.Add(new ReviewLikeEntity
+                {
+                    ReviewId = reviewId,
+                    UserId = userId,
+                    IsPositive = isPositive
+                });
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task RemoveReviewLikeAsync(string reviewId, Guid userId)
+        {
+            var like = await _db.ReviewLikes
+                .FirstOrDefaultAsync(l => l.ReviewId == reviewId && l.UserId == userId);
+            if (like is not null)
+            {
+                _db.ReviewLikes.Remove(like);
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task<(int Likes, int Dislikes)> GetReviewLikesCountAsync(string reviewId)
+        {
+            var likes = await _db.ReviewLikes
+                .Where(l => l.ReviewId == reviewId)
+                .GroupBy(l => l.IsPositive)
+                .Select(g => new { IsPositive = g.Key, Count = g.Count() })
+                .ToListAsync();
+            return (likes.FirstOrDefault(l => l.IsPositive)?.Count ?? 0,
+                    likes.FirstOrDefault(l => !l.IsPositive)?.Count ?? 0);
+        }
+
+        public async Task<bool?> GetUserReviewLikeAsync(string reviewId, Guid userId)
+        {
+            var like = await _db.ReviewLikes
+                .FirstOrDefaultAsync(l => l.ReviewId == reviewId && l.UserId == userId);
+            return like?.IsPositive;
+        }
     }
 
     public record EmbeddingGenerationResult(int Total, int Processed, int Errors);
 }
+

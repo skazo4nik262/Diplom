@@ -63,7 +63,22 @@ public class PlaylistsController : ControllerBase
         await _postgres.RemoveMediaFromPlaylistAsync(playlistId, tmdbId);
         return Ok();
     }
+
+    [HttpDelete("{playlistId:int}")]
+    public async Task<IActionResult> DeletePlaylist(int playlistId)
+    {
+        await _postgres.DeletePlaylistAsync(playlistId);
+        return Ok();
+    }
+
+    [HttpPut("{playlistId:int}")]
+    public async Task<IActionResult> UpdatePlaylist(int playlistId, [FromBody] UpdatePlaylistRequest request)
+    {
+        await _postgres.UpdatePlaylistAsync(playlistId, request.Name, request.Description);
+        return Ok();
+    }
 }
 
 public record CreatePlaylistRequest(string Name, string? Description, IEnumerable<int>? TmdbIds);
 public record AddMovieRequest(int TmdbId);
+public record UpdatePlaylistRequest(string Name, string? Description);

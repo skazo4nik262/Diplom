@@ -1,0 +1,140 @@
+@page "/profile"
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject AuthService Auth
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+
+<div class="mt-4">
+    <div class="d-flex align-center mb-4" style="flex-wrap: wrap; gap: 12px;">
+        <MudText Typo="Typo.h4" Class="flex-grow-1">Мои фильмы</MudText>
+        @if (_profile is not null)
+        {
+            <MudText Typo="Typo.body1">
+                @(!string.IsNullOrEmpty(_profile.Username) ? _profile.Username : _profile.Login)
+            </MudText>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" Href="/profile/edit">
+                Редактировать
+            </MudButton>
+        }
+    </div>
+
+    @if (_stats is not null)
+    {
+        <div class="user-stats-bar">
+            <div class="stat-item">
+                <span class="stat-value">@_stats.TotalMovies</span>
+                <span class="stat-label">Всего</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">@_stats.WatchedMovies</span>
+                <span class="stat-label">Просмотрено</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">@_stats.TotalHours ч</span>
+                <span class="stat-label">Часов</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">@_stats.AverageRating.ToString("F1")</span>
+                <span class="stat-label">Средняя оценка</span>
+            </div>
+            @if (_stats.TopGenres?.Count > 0)
+            {
+                <div class="stat-item stat-genres">
+                    <span class="stat-label">Любимые жанры:</span>
+                    <span class="stat-value" style="font-size: 0.8rem;">
+                        @string.Join(", ", _stats.TopGenres.Select(g => $"{g.Name} ({g.Count})"))
+                    </span>
+                </div>
+            }
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="profile-movie-grid">
+            @for (var i = 0; i < 12; i++)
+            {
+                <div>
+                    <div class="skeleton skeleton-poster" style="width: 100%"></div>
+                    <div class="skeleton skeleton-text" style="margin-top: 8px"></div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <MudTabs @bind-ActivePanel="_activeTab" Class="mb-4">
+            <MudTabPanel Text="@($"Избранное ({_favoriteMovies.Count})")">
+                <MovieGrid Movies="_favoriteMovies" OnMovieRemoved="HandleMovieRemoved" />
+            </MudTabPanel>
+            <MudTabPanel Text="@($"Смотрю ({_watchingMovies.Count})")">
+                <MovieGrid Movies="_watchingMovies" OnMovieRemoved="HandleMovieRemoved" />
+            </MudTabPanel>
+            <MudTabPanel Text="@($"Запланировано ({_plannedMovies.Count})")">
+                <MovieGrid Movies="_plannedMovies" OnMovieRemoved="HandleMovieRemoved" />
+            </MudTabPanel>
+            <MudTabPanel Text="@($"Просмотрено ({_watchedMovies.Count})")">
+                <MovieGrid Movies="_watchedMovies" OnMovieRemoved="HandleMovieRemoved" />
+            </MudTabPanel>
+            <MudTabPanel Text="@($"Брошено ({_droppedMovies.Count})")">
+                <MovieGrid Movies="_droppedMovies" OnMovieRemoved="HandleMovieRemoved" />
+            </MudTabPanel>
+        </MudTabs>
+    }
+</div>
+
+@code {
+    private List<UserMovieDto> _allMovies = [];
+    private List<UserMovieDto> _favoriteMovies => _allMovies.Where(m => m.Status == "favorite").ToList();
+    private List<UserMovieDto> _watchingMovies => _allMovies.Where(m => m.Status == "watching").ToList();
+    private List<UserMovieDto> _plannedMovies => _allMovies.Where(m => m.Status == "planned").ToList();
+    private List<UserMovieDto> _watchedMovies => _allMovies.Where(m => m.Status == "watched").ToList();
+    private List<UserMovieDto> _droppedMovies => _allMovies.Where(m => m.Status == "dropped").ToList();
+    private bool _loading = true;
+    private int _activeTab;
+    private ProfileResponse? _profile;
+    private UserStatsDto? _stats;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        _profile = await Auth.GetProfileAsync();
+        var userId = _profile?.Id;
+        if (userId.HasValue)
+            _stats = await Catalog.GetUserStatsAsync(userId.Value);
+
+        await LoadMovies();
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadMovies()
+    {
+        try
+        {
+            _allMovies = await Catalog.GetUserMoviesAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+        }
+    }
+
+    private async Task HandleMovieRemoved(int movieId)
+    {
+        _allMovies.RemoveAll(m => m.MovieId == movieId);
+        var userId = _profile?.Id;
+        if (userId.HasValue)
+            _stats = await Catalog.GetUserStatsAsync(userId.Value);
+        StateHasChanged();
+    }
+}
