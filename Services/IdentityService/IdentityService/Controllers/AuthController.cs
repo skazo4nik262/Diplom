@@ -9,7 +9,7 @@ namespace IdentityService.Controllers
     public record AuthResponse(string Token, Guid UserId, string Login, string? Username, int Role, string RefreshToken, DateTime RefreshTokenExpiresAt);
     public record RefreshRequest(string RefreshToken);
     public record RefreshResponse(string Token, string RefreshToken, DateTime RefreshTokenExpiresAt);
-    public record UserResponse(Guid Id, string Login, string? Username, int Role, bool IsActive = true);
+    public record UserResponse(Guid Id, string Login, string? Username, int Role, bool IsActive = true, string? AvatarUrl = null);
     public record ProfileResponse(Guid Id, string Login, string? Username, string? Bio, DateTime? Birthday, string? AvatarUrl, int Role);
     public record UpdateProfileRequest(string? Username, string? Bio, DateTime? Birthday, string? AvatarUrl);
 
@@ -69,7 +69,7 @@ namespace IdentityService.Controllers
             {
                 var user = await _identityService.CreateAsync(request.Login, request.Password, request.Role, request.Username);
                 _logger.LogInformation("User registered: {Login}", user.Login);
-                return Ok(new UserResponse(user.Id, user.Login, user.Username, user.Role, user.IsActive));
+                return Ok(new UserResponse(user.Id, user.Login, user.Username, user.Role, user.IsActive, user.AvatarUrl));
             }
             catch (InvalidOperationException ex)
             {
@@ -134,7 +134,7 @@ namespace IdentityService.Controllers
             else
                 users = await _identityService.SearchUsersAsync(query);
 
-            return Ok(users.Select(u => new UserResponse(u.Id, u.Login, u.Username, u.Role, u.IsActive)).ToList());
+            return Ok(users.Select(u => new UserResponse(u.Id, u.Login, u.Username, u.Role, u.IsActive, u.AvatarUrl)).ToList());
         }
 
         [HttpGet("users/{login}")]
@@ -143,7 +143,7 @@ namespace IdentityService.Controllers
             var user = await _identityService.GetByLoginAsync(login);
             if (user is null) return NotFound();
 
-            return Ok(new UserResponse(user.Id, user.Login, user.Username, user.Role, user.IsActive));
+            return Ok(new UserResponse(user.Id, user.Login, user.Username, user.Role, user.IsActive, user.AvatarUrl));
         }
 
         [HttpGet("users/id/{id:guid}")]
@@ -257,7 +257,7 @@ namespace IdentityService.Controllers
             if (user is null) return NotFound();
 
             _logger.LogInformation("User {Login} role changed to {Role}", user.Login, user.Role);
-            return Ok(new UserResponse(user.Id, user.Login, user.Username, user.Role, user.IsActive));
+            return Ok(new UserResponse(user.Id, user.Login, user.Username, user.Role, user.IsActive, user.AvatarUrl));
         }
 
         [HttpGet("users/{id:guid}/token-version")]
