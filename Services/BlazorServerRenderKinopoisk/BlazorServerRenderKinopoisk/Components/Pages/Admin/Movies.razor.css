@@ -1,0 +1,22 @@
+.admin-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 16px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 12px;
+}
+
+.admin-scan-progress {
+    width: 100%;
+}
+
+.admin-scan-info {
+    opacity: 0.6;
+}
+
+.admin-scan-result {
+    width: 100%;
+}

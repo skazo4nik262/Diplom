@@ -1,5 +1,6 @@
 @page "/movie/{MovieId:int}"
 @rendermode InteractiveServer
+@implements IAsyncDisposable
 @inject TokenStore TokenStore
 @inject CatalogService Catalog
 @inject NavigationManager Navigation
@@ -200,6 +201,25 @@
                         <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
                     }
                 </div>
+                <div class="movie-detail-favorite-section">
+                    <span class="movie-detail-favorite-label">В избранном: </span>
+                    <button class="movie-detail-favorite-btn@(_isFavorite ? " active" : "")"
+                            @onclick="ToggleFavorite"
+                            disabled="@_favoriteSending">
+                        @if (_isFavorite)
+                        {
+                            <text>♥</text>
+                        }
+                        else
+                        {
+                            <text>♡</text>
+                        }
+                    </button>
+                    @if (_favoriteSending)
+                    {
+                        <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
+                    }
+                </div>
                 <div class="movie-detail-rating-section">
                     <span class="movie-detail-rating-label">Оценка: </span>
                     @if (_showRatingButtons)
@@ -237,7 +257,41 @@
                     </div>
                 </div>
             </div>
-            <video id="movie-player" class="movie-detail-player" controls></video>
+            @if (_movieFile?.JellyfinItemId is not null)
+            {
+                <video id="movie-player" class="movie-detail-player" controls
+                       data-hls-src="/api/jellyfin/Media/hls/@_movieFile.JellyfinItemId.Value/master.m3u8"></video>
+            }
+            else
+            {
+                <video id="movie-player" class="movie-detail-player" controls></video>
+            }
+
+            @if (TokenStore.IsAdmin)
+            {
+                <div class="mt-4 admin-upload-section">
+                    @if (_movieFile is null)
+                    {
+                        <MudTextField @bind-Value="_magnetUrl"
+                                      Placeholder="Вставьте magnet-ссылку..."
+                                      Variant="Variant.Outlined"
+                                      Class="mb-2"
+                                      Disabled="_downloadSending" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+                                   OnClick="@DownloadViaTorrent" Disabled="@(!_canDownload)">
+                            @(_downloadSending ? "Скачивание..." : "Скачать через торрент")
+                        </MudButton>
+                        if (_downloadSending)
+                        {
+                            <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
+                        }
+                    }
+                    else if (!_movieFile.IsReady)
+                    {
+                        <span style="opacity: 0.6">Файл скачан, ожидайте обработки...</span>
+                    }
+                </div>
+            }
 
             @if (_trailers?.Count > 0)
             {
@@ -483,6 +537,8 @@
     private bool _showRatingButtons = true;
     private string? _movieStatus;
     private bool _statusSending;
+    private bool _isFavorite;
+    private bool _favoriteSending;
     private readonly string[] _statuses = ["watching", "planned", "watched", "dropped"];
     private Dictionary<int, UserMovieStatusDto> _userStatuses = [];
     private List<ReviewDto>? _reviews;
@@ -498,6 +554,10 @@
     private Dictionary<string, ReviewLikesDto> _reviewLikes = [];
     private Dictionary<string, string> _commentTexts = [];
     private string? _galleryImage;
+    private MovieFileDto? _movieFile;
+    private string _magnetUrl = "";
+    private bool _downloadSending;
+    private bool _canDownload => !_downloadSending && !string.IsNullOrWhiteSpace(_magnetUrl);
 
     private static string StatusDisplayText(string status) => status switch
     {
@@ -565,6 +625,32 @@
             await JS.InvokeVoidAsync("showToast", $"Помечено: {status}");
         else
             await JS.InvokeVoidAsync("showToast", "Статус сброшен");
+    }
+
+    private async Task ToggleFavorite()
+    {
+        if (_favoriteSending) return;
+        _favoriteSending = true;
+        var wasFavorite = _isFavorite;
+        _isFavorite = !_isFavorite;
+        try
+        {
+            if (_isFavorite)
+                await Catalog.SetFavoriteAsync(MovieId);
+            else
+                await Catalog.RemoveFavoriteAsync(MovieId);
+            await JS.InvokeVoidAsync("showToast", _isFavorite ? "Добавлено в избранное" : "Удалено из избранного");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        catch
+        {
+            _isFavorite = wasFavorite;
+        }
+        _favoriteSending = false;
     }
 
     private async Task RateMovie(int rating)
@@ -702,8 +788,35 @@
         _galleryImage = null;
     }
 
+    private async Task DownloadViaTorrent()
+    {
+        if (_downloadSending || string.IsNullOrWhiteSpace(_magnetUrl)) return;
+        _downloadSending = true;
+        var ok = await Catalog.DownloadViaTorrentAsync(MovieId, _magnetUrl);
+        _downloadSending = false;
+        if (ok)
+        {
+            await JS.InvokeVoidAsync("showToast", "Торрент добавлен в загрузку");
+            _magnetUrl = "";
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("showToast", "Ошибка добавления торрента");
+        }
+    }
+
+    private async Task LoadMovieFile()
+    {
+        _movieFile = await Catalog.GetMovieFileAsync(MovieId);
+        StateHasChanged();
+    }
+
     private bool _initialized;
     private int _prevMovieId;
+    private double? _savedPosition;
+    private PeriodicTimer? _progressTimer;
+    private CancellationTokenSource? _progressCts;
+    private record struct PlayerState(double Position, double Duration);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -720,6 +833,11 @@
         _prevMovieId = MovieId;
         await LoadMovieData();
         await JS.InvokeVoidAsync("initMoviePlayer");
+
+        if (_savedPosition is not null && _savedPosition > 0)
+            await JS.InvokeVoidAsync("setInitialPosition", _savedPosition.Value);
+
+        _ = StartProgressSaving();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -753,6 +871,7 @@
         _reviewLikes = [];
         _commentTexts = [];
         _expandedComments = [];
+        _movieFile = null;
         StateHasChanged();
 
         try
@@ -766,7 +885,8 @@
             var reviewsTask = Catalog.GetMovieReviewsAsync(MovieId);
             var ratingDistTask = Catalog.GetMovieRatingDistributionAsync(MovieId);
             var videosTask = Catalog.GetMovieVideosAsync(MovieId);
-            await Task.WhenAll(movieTask, castTask, crewTask, similarTask, statusTask, collectionTask, reviewsTask, ratingDistTask, videosTask);
+            var fileTask = Catalog.GetMovieFileAsync(MovieId);
+            await Task.WhenAll(movieTask, castTask, crewTask, similarTask, statusTask, collectionTask, reviewsTask, ratingDistTask, videosTask, fileTask);
             _movie = movieTask.Result;
             _cast = castTask.Result;
             _crew = crewTask.Result;
@@ -776,6 +896,7 @@
             _ratingDistribution = ratingDistTask.Result;
             _trailers = videosTask.Result?.Where(v => v.Site == "YouTube" && v.Type == "Trailer").Take(4).ToList();
             _backdrops = _movie?.Images?.Where(i => i.Type == "backdrop").ToList();
+            _movieFile = fileTask.Result;
 
             _hasReview = false;
             _editingReviewId = null;
@@ -783,13 +904,15 @@
             _hasReview = myReview is not null;
             _dataLoading = false;
 
-            var (existingRating, existingStatus) = statusTask.Result;
+            var (existingRating, existingStatus, existingIsFavorite, lastPosition, duration) = statusTask.Result;
             if (existingRating.HasValue)
             {
                 _userRating = existingRating.Value;
                 _showRatingButtons = false;
             }
             _movieStatus = existingStatus;
+            _isFavorite = existingIsFavorite;
+            _savedPosition = lastPosition;
 
             var allIds = new List<int>();
             if (_collection?.Movies?.Count > 0)
@@ -809,4 +932,41 @@
             Navigation.NavigateTo("/login");
         }
     }
+
+    private async Task StartProgressSaving()
+    {
+        _progressCts?.Cancel();
+        _progressTimer?.Dispose();
+        _progressCts = new CancellationTokenSource();
+        _progressTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        var ct = _progressCts.Token;
+
+        try
+        {
+            while (await _progressTimer!.WaitForNextTickAsync(ct))
+            {
+                var state = await JS.InvokeAsync<PlayerState?>("window.getPlayerState");
+                if (state is not null && state.Value.Position > 0)
+                {
+                    await Catalog.SaveProgressAsync(MovieId, state.Value.Position, state.Value.Duration);
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_progressTimer is not null)
+        {
+            var state = await JS.InvokeAsync<PlayerState?>("window.getPlayerState");
+            if (state is not null && state.Value.Position > 0)
+                await Catalog.SaveProgressAsync(MovieId, state.Value.Position, state.Value.Duration);
+        }
+        _progressCts?.Cancel();
+        _progressCts?.Dispose();
+        _progressTimer?.Dispose();
+    }
 }
+
+

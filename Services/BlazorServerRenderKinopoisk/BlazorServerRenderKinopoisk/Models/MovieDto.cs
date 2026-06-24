@@ -155,6 +155,9 @@ namespace BlazorServerRenderKinopoisk.Models
     {
         [JsonPropertyName("rating")] public int? Rating { get; set; }
         [JsonPropertyName("status")] public string? Status { get; set; }
+        [JsonPropertyName("isFavorite")] public bool IsFavorite { get; set; }
+        [JsonPropertyName("lastPositionSeconds")] public double? LastPositionSeconds { get; set; }
+        [JsonPropertyName("durationSeconds")] public double? DurationSeconds { get; set; }
     }
 
     public class PlaylistCreateDto

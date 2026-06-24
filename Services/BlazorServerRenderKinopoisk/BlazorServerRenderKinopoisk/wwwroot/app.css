@@ -277,7 +277,8 @@
     gap: 8px;
     font-size: 0.9rem;
     margin-bottom: 8px;
-    align-items: baseline;
+    align-items: flex-start;
+    flex-wrap: wrap;
 }
 
 .movie-detail-crew-label {
@@ -526,6 +527,47 @@
 
 .movie-detail-status-clear:hover {
     color: #ff5252;
+}
+
+.movie-detail-favorite-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.movie-detail-favorite-label {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    white-space: nowrap;
+}
+
+.movie-detail-favorite-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.movie-detail-favorite-btn:hover:not(:disabled) {
+    border-color: #ff4080;
+    color: #ff4080;
+}
+
+.movie-detail-favorite-btn.active {
+    border-color: #ff4080;
+    color: #ff4080;
+    background: rgba(255, 64, 128, 0.1);
+}
+
+.movie-detail-favorite-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
 .profile-movie-grid {
@@ -838,6 +880,34 @@
     background: #ff5252;
 }
 
+.playlist-add-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    background: rgba(0, 0, 0, 0.7);
+    border: none;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+    line-height: 1;
+}
+
+.profile-movie-card:hover .playlist-add-btn {
+    opacity: 1;
+}
+
+.playlist-add-btn:hover {
+    background: #4caf50;
+}
+
 .dialog-overlay {
     position: fixed;
     inset: 0;
@@ -896,6 +966,51 @@
     background: #F6C516;
     border-color: #F6C516;
     color: #0f0f0f;
+}
+
+.mood-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.search-text-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.search-page-input {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.search-page-input .mud-input-outlined-border {
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.mood-chip {
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 64, 128, 0.3);
+    background: rgba(255, 64, 128, 0.08);
+    color: rgba(255, 64, 128, 0.8);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.mood-chip:hover {
+    background: rgba(255, 64, 128, 0.18);
+    border-color: #ff4080;
+    color: #ff4080;
+}
+
+.mood-chip.selected {
+    background: #ff4080;
+    border-color: #ff4080;
+    color: #fff;
 }
 
 .genre-bar {
@@ -998,6 +1113,16 @@
     justify-content: center;
 }
 
+.movie-favorite-badge {
+    position: absolute;
+    top: 6px;
+    right: 32px;
+    font-size: 0.85rem;
+    color: #ff4080;
+    text-shadow: 0 0 6px rgba(255, 64, 128, 0.5);
+    line-height: 1;
+}
+
 .page-fade-in {
     animation: fadeIn 0.3s ease;
 }
@@ -1034,6 +1159,21 @@
 
 .movie-card:hover {
     transform: scale(1.03);
+}
+
+.movie-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.movie-progress-fill {
+    height: 100%;
+    background: #e50914;
+    transition: width 0.3s;
 }
 
 .cast-card {
@@ -1516,6 +1656,45 @@
     margin-bottom: 2px;
 }
 
+.taste-dna-section {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+}
+
+.taste-dna-group {
+    margin-top: 8px;
+}
+
+.taste-dna-label {
+    font-size: 0.75rem;
+    opacity: 0.5;
+    display: block;
+    margin-bottom: 6px;
+}
+
+.taste-dna-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+}
+
+.taste-dna-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(246, 197, 22, 0.12);
+    color: #F6C516;
+    line-height: 1.4;
+    transition: background 0.15s;
+}
+
+.taste-dna-tag:hover {
+    background: rgba(246, 197, 22, 0.25);
+}
+
 /* Playlist delete button */
 .playlist-delete-btn {
     position: absolute;
@@ -1711,4 +1890,248 @@
 /* Badge spacing */
 .mud-badge {
     margin-right: 4px;
+}
+
+/* ─── Admin Pages ─── */
+.admin-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 16px 24px;
+}
+
+.admin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+}
+
+.admin-card {
+    display: flex;
+    gap: 12px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 12px;
+    padding: 12px;
+    transition: background 0.15s;
+}
+
+.admin-card:hover {
+    background: rgba(255,255,255,0.06);
+}
+
+.admin-card.skeleton {
+    pointer-events: none;
+}
+
+.admin-card-poster {
+    width: 100px;
+    min-height: 140px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    background-size: cover;
+    background-position: center;
+    background-color: #1a1a1a;
+}
+
+.skeleton-box {
+    background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.skeleton-text {
+    height: 14px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+.admin-card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.admin-card-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-card-meta {
+    font-size: 0.8rem;
+    opacity: 0.5;
+    display: flex;
+    gap: 8px;
+}
+
+.admin-card-rating {
+    color: #F6C516;
+}
+
+.admin-card-download {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 8px;
+}
+
+.admin-magnet-input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #fff;
+    font-size: 0.8rem;
+    outline: none;
+}
+
+.admin-magnet-input:focus {
+    border-color: #F6C516;
+}
+
+.admin-download-btn {
+    background: #F6C516;
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-weight: 600;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.admin-download-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.admin-card-status {
+    font-size: 0.8rem;
+    margin-top: auto;
+    padding-top: 8px;
+}
+
+.status-ready { color: #4caf50; }
+.status-processing { color: #ff9800; }
+
+.admin-load-more {
+    display: flex;
+    justify-content: center;
+    margin: 24px 0;
+}
+
+/* ─── Admin Users ─── */
+.admin-users-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.admin-user-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 10px;
+    transition: background 0.15s;
+}
+
+.admin-user-row:hover {
+    background: rgba(255,255,255,0.06);
+}
+
+.admin-user-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-user-login {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.admin-user-login.admin-self {
+    opacity: 0.5;
+}
+
+.admin-user-username {
+    font-size: 0.8rem;
+    opacity: 0.5;
+}
+
+.admin-user-role {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+}
+
+.admin-user-role.role-admin {
+    color: #F6C516;
+    border: 1px solid #F6C516;
+}
+
+.admin-role-btn {
+    background: rgba(246,197,22,0.12);
+    color: #F6C516;
+    border: 1px solid rgba(246,197,22,0.3);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+
+.admin-role-btn:hover:not(:disabled) {
+    background: rgba(246,197,22,0.25);
+}
+
+.admin-role-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.admin-block-btn {
+    background: rgba(244,67,54,0.15);
+    color: #f44336;
+    border: 1px solid rgba(244,67,54,0.3);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+
+.admin-block-btn:hover:not(:disabled) {
+    background: rgba(244,67,54,0.25);
+}
+
+.admin-block-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.admin-users-search {
+    max-width: 600px;
+    margin: 16px auto;
 }

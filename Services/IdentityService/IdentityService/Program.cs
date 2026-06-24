@@ -15,6 +15,7 @@ namespace IdentityService
             builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
             builder.Services.AddScoped<IIdentity, Identity>();
             builder.Services.AddScoped<ITokenService, TokenService>();
+            builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 
             builder.Services.AddControllers();
 

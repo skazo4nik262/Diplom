@@ -76,9 +76,39 @@ namespace IdentityService.Models
             if (user is null || !user.IsActive) return false;
 
             user.IsActive = false;
+            user.TokenVersion++;
             await _db.SaveChangesAsync();
             return true;
         }
+
+        public async Task<bool> ActivateAsync(Guid id)
+        {
+            var user = await _db.Users.FindAsync(id);
+            if (user is null || user.IsActive) return false;
+
+            user.IsActive = true;
+            user.TokenVersion++;
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<User?> SetRoleAsync(Guid id, int role)
+        {
+            var user = await _db.Users.FindAsync(id);
+            if (user is null) return null;
+
+            user.Role = role;
+            user.TokenVersion++;
+            await _db.SaveChangesAsync();
+            return user;
+        }
+
+        public async Task<int> GetTokenVersionAsync(Guid id)
+        {
+            var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id);
+            return user?.TokenVersion ?? -1;
+        }
+
         public async Task<string?> GenerateTokenAsync(string login, string password)
         {
             var user = await GetByLoginAsync(login);
@@ -99,6 +129,17 @@ namespace IdentityService.Models
             return await _db.Users
                 .AsNoTracking()
                 .Where(u => u.IsActive && (u.Login.ToLower().Contains(lower) || u.Username!.ToLower().Contains(lower)))
+                .Take(20)
+                .ToListAsync();
+        }
+
+        public async Task<List<User>> SearchAllUsersAsync(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return [];
+            var lower = query.ToLower();
+            return await _db.Users
+                .AsNoTracking()
+                .Where(u => u.Login.ToLower().Contains(lower) || u.Username!.ToLower().Contains(lower))
                 .Take(20)
                 .ToListAsync();
         }

@@ -27,8 +27,18 @@ public class UserMoviesController : ControllerBase
         var userId = GetUserId();
         if (userId == Guid.Empty) return Unauthorized();
 
-        var (rating, status) = await _postgres.GetUserMovieStatusAsync(userId, tmdbId);
-        return Ok(new { rating, status });
+        var (rating, status, isFavorite, lastPosition, duration) = await _postgres.GetUserMovieExtendedStatusAsync(userId, tmdbId);
+        return Ok(new { rating, status, isFavorite, lastPositionSeconds = lastPosition, durationSeconds = duration });
+    }
+
+    [HttpGet("{tmdbId:int}/progress")]
+    public async Task<IActionResult> GetUserMovieProgress(int tmdbId)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        var (_, _, isFavorite, lastPosition, duration) = await _postgres.GetUserMovieExtendedStatusAsync(userId, tmdbId);
+        return Ok(new { lastPositionSeconds = lastPosition, durationSeconds = duration });
     }
 
     [HttpGet]
@@ -85,7 +95,7 @@ public class UserMoviesController : ControllerBase
             .ToList() ?? [];
 
         var result = await _postgres.GetUserMoviesStatusBatchAsync(userId, parsedIds);
-        var dto = result.ToDictionary(kv => kv.Key, kv => new { kv.Value.Rating, kv.Value.Status });
+        var dto = result.ToDictionary(kv => kv.Key, kv => new { kv.Value.Rating, kv.Value.Status, kv.Value.IsFavorite, lastPositionSeconds = kv.Value.LastPosition, durationSeconds = kv.Value.Duration });
         return Ok(dto);
     }
 
@@ -105,7 +115,7 @@ public class UserMoviesController : ControllerBase
         var userId = GetUserId();
         if (userId == Guid.Empty) return Unauthorized();
 
-        await _postgres.SetMovieStatusAsync(userId, tmdbId, "favorite");
+        await _postgres.SetFavoriteAsync(userId, tmdbId);
         await _postgres.RecordActivityAsync(userId, "favorite_added", tmdbId);
         return Ok();
     }
@@ -116,9 +126,7 @@ public class UserMoviesController : ControllerBase
         var userId = GetUserId();
         if (userId == Guid.Empty) return Unauthorized();
 
-        var (_, status) = await _postgres.GetUserMovieStatusAsync(userId, tmdbId);
-        if (status == "favorite")
-            await _postgres.RemoveUserMovieAsync(userId, tmdbId);
+        await _postgres.RemoveFavoriteAsync(userId, tmdbId);
         return Ok();
     }
 
@@ -131,7 +139,28 @@ public class UserMoviesController : ControllerBase
         var movies = await _postgres.GetUserMoviesAsync(userId, "favorite", page);
         return Ok(movies);
     }
+
+    [HttpPut("{tmdbId:int}/progress")]
+    public async Task<IActionResult> SetProgress(int tmdbId, [FromBody] ProgressRequest request)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        await _postgres.SetMovieProgressAsync(userId, tmdbId, request.Position, request.Duration);
+        return Ok();
+    }
+
+    [HttpGet("continue-watching")]
+    public async Task<IActionResult> GetContinueWatching([FromQuery] int page = 1)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        var movies = await _postgres.GetContinueWatchingAsync(userId, page);
+        return Ok(movies);
+    }
 }
 
 public record RateRequest(int Rating);
 public record StatusRequest(string Status);
+public record ProgressRequest(double Position, double Duration);

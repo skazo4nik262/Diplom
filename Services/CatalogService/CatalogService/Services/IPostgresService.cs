@@ -14,22 +14,26 @@ namespace CatalogService.Services
         Task<List<MovieEntity>> SearchMoviesAsync(string query, int page, List<int>? genreIds = null,
             int? yearFrom = null, int? yearTo = null, double? ratingFrom = null, double? ratingTo = null,
             int? runtimeFrom = null, int? runtimeTo = null, string? sortBy = null, string? sortOrder = null);
+        Task<List<MovieEntity>> SearchByImageAsync(string query, int page, CancellationToken ct = default);
         Task<List<MovieEntity>> GetPersonMoviesAsync(int personId, int page);
         Task<List<MovieEntity>> GetPopularMoviesAsync(int page);
         Task<List<MovieEntity>> GetTopRatedMoviesAsync(int page);
         Task<List<MovieEntity>> GetTrendingMoviesAsync(int page);
-        Task<Dictionary<int, (int? Rating, string? Status)>> GetUserMoviesStatusBatchAsync(Guid userId, List<int> movieIds);
+        Task<Dictionary<int, (int? Rating, string? Status, bool IsFavorite, double? LastPosition, double? Duration)>> GetUserMoviesStatusBatchAsync(Guid userId, List<int> movieIds);
         Task<List<MovieCastEntity>> GetMovieCastAsync(int tmdbId);
         Task<List<MovieCrewEntity>> GetMovieCrewAsync(int tmdbId);
         Task<PersonEntity?> GetPersonAsync(int personId);
         Task<List<GenreEntity>> GetGenresAsync();
+        Task<List<GenreEntity>> GetPopularGenresAsync(int count = 10);
         Task<List<ProductionCompanyEntity>> GetCompaniesAsync();
-        Task<List<MovieEntity>> GetRecommendationsAsync(Guid userId, int page);
+        Task<List<MovieEntity>> GetRecommendationsAsync(Guid userId, int page, bool useImage = false);
         Task<List<MovieEntity>> GetUserTasteAsync(Guid userId, int page);
-        Task<List<MovieEntity>> GetSimilarMoviesAsync(int tmdbId, int page);
+        Task<List<MovieEntity>> GetSimilarMoviesAsync(int tmdbId, int page, bool useImage = false);
+        Task<List<MovieEntity>> GetMoodMoviesAsync(string mood, int page);
         Task<List<UserMovieEntity>> GetUserMoviesAsync(Guid userId, string? status, int page);
         Task<List<UserPlaylistEntity>> GetPlaylistsAsync(Guid userId);
         Task<UserPlaylistEntity?> GetPlaylistAsync(int playlistId);
+        Task<List<MovieEntity>> GetPlaylistSuggestionsAsync(int playlistId, int count = 5);
         Task<List<PersonEntity>> GetPeopleBatchAsync(IEnumerable<int> personIds);
         Task<PersonEntity?> SearchPersonAsync(string query);
         Task<CollectionEntity?> GetCollectionAsync(int collectionId);
@@ -45,7 +49,9 @@ namespace CatalogService.Services
         Task AddMovie(Movie movie);
         Task AddPerson(Person person);
         Task AddCollection(CollectionEntity collection);
-        Task SetMovieStatusAsync(Guid userId, int tmdbId,  string status);
+        Task SetMovieStatusAsync(Guid userId, int tmdbId, string status);
+        Task SetFavoriteAsync(Guid userId, int tmdbId);
+        Task RemoveFavoriteAsync(Guid userId, int tmdbId);
         Task AddReviewAsync(Guid userId, int tmdbId, ReviewEntity review);
         Task AddPlaylistAsync(Guid userId, string name, string? description, IEnumerable<int> tmdbIds);
         Task AddMediaToPlaylistAsync(int playlistId, int tmdbId);
@@ -57,13 +63,26 @@ namespace CatalogService.Services
         Task AddOrUpdateReviewLikeAsync(string reviewId, Guid userId, bool isPositive);
         #endregion
 
+        #region Notifications
+        Task<(bool NotifyNewInCollection, bool NotifyVideoAdded, bool NotifyFileAdded)> GetNotificationSettingsAsync(Guid userId);
+        Task SetNotificationSettingsAsync(Guid userId, bool? notifyNewInCollection, bool? notifyVideoAdded, bool? notifyFileAdded);
+        Task CheckNewCollectionMoviesAsync();
+        Task CheckNewCollectionMovieForMovieAsync(int tmdbId);
+        Task CheckNewVideosAsync();
+        Task CheckNewFilesAsync();
+        #endregion
+
         #region Update
         Task UpdateMovie(Movie movie, int tmdbId);
+        Task AttachKeywordsAsync(int tmdbId, List<TMDbLib.Objects.General.Keyword> keywords);
         Task UpdatePerson(Person person, int personId);
         Task UpdateCollection(CollectionEntity collection);
         Task UpdatePlaylistAsync(int playlistId, string name, string? description);
         Task RateMovieAsync(Guid userId, int tmdbId, int rating);
-        Task<(int? Rating, string? Status)> GetUserMovieStatusAsync(Guid userId, int tmdbId);
+        Task<(int? Rating, string? Status, bool IsFavorite)> GetUserMovieStatusAsync(Guid userId, int tmdbId);
+        Task SetMovieProgressAsync(Guid userId, int tmdbId, double position, double duration);
+        Task<(int? Rating, string? Status, bool IsFavorite, double? LastPosition, double? Duration)> GetUserMovieExtendedStatusAsync(Guid userId, int tmdbId);
+        Task<List<UserMovieEntity>> GetContinueWatchingAsync(Guid userId, int page = 1);
 
         #endregion
 
@@ -86,11 +105,14 @@ namespace CatalogService.Services
         Task<List<ReviewCommentEntity>> GetReviewCommentsAsync(string reviewId);
         Task<(int Likes, int Dislikes)> GetReviewLikesCountAsync(string reviewId);
         Task<bool?> GetUserReviewLikeAsync(string reviewId, Guid userId);
+        Task<TasteDnaResult> GetUserTasteDnaAsync(Guid userId);
         #endregion
 
         #region Embeddings
         Task EnsureEmbeddingsAsync(int tmdbId);
-        Task<EmbeddingGenerationResult> RebuildAllEmbeddingsAsync();
+        Task<List<int>> GetAllMovieIdsAsync();
+        Task<List<int>> GetMovieIdsWithoutEmbeddingsAsync();
+        Task ClearAllEmbeddingsAsync();
         #endregion
 
         #region Friends
@@ -113,11 +135,23 @@ namespace CatalogService.Services
         Task<int> GetUnreadNotificationCountAsync(Guid userId);
         Task MarkNotificationReadAsync(Guid notificationId);
         Task MarkAllNotificationsReadAsync(Guid userId);
-        Task CreateNotificationAsync(Guid userId, Guid actorId, string eventType, int? movieId = null, string? reviewId = null, int? playlistId = null);
+        Task CreateNotificationAsync(Guid userId, Guid? actorId, string eventType, int? movieId = null, string? reviewId = null, int? playlistId = null);
         #endregion
 
         #region Diary
         Task<List<UserMovieEntity>> GetDiaryAsync(Guid userId, int? year = null, int? month = null, int page = 1, int pageSize = 20);
         #endregion
+    }
+
+    public class TasteDnaItem
+    {
+        public string Name { get; set; } = null!;
+        public double Score { get; set; }
+    }
+
+    public class TasteDnaResult
+    {
+        public List<TasteDnaItem> Genres { get; set; } = [];
+        public List<TasteDnaItem> Keywords { get; set; } = [];
     }
 }

@@ -43,6 +43,8 @@ services:
   catalog-service:
     build: ./Services/CatalogService/CatalogService
     container_name: catalog-service
+    volumes:
+      - D:/KinopoiskCacheImages:/cache/images
     environment:
       - ConnectionStrings__Default=Host=postgres;Database=mydb;Username=skazo4nik;Password=qaz123wsx
       - Jwt__Key=your_very_long_secret_key_at_least_32_chars
@@ -55,12 +57,28 @@ services:
       - DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=1
       - TMDB_API_KEY=76ac486e8244a34f77259b927d1852e5
       - EmbeddingService__Url=http://embedding-service:5004
-      - NO_PROXY=localhost,127.0.0.1,embedding-service,postgres,ollama,clip
+      - CacheImageService__Url=http://cache-image-service:5007
+      - NO_PROXY=localhost,127.0.0.1,embedding-service,postgres,ollama,oclip,cache-image-service
     depends_on:
       vless-proxy:
         condition: service_started
       postgres:
         condition: service_healthy
+      cache-image-service:
+        condition: service_started
+#----------------------------------------------------------------
+  cache-image-service:
+    build: ./Services/CacheImageService/CacheImageService
+    container_name: cache-image-service
+    volumes:
+      - D:/KinopoiskCacheImages:/cache/images
+    environment:
+      - HTTP_PROXY=socks5://vless-proxy:1080
+      - HTTPS_PROXY=socks5://vless-proxy:1080
+      - http_proxy=socks5://vless-proxy:1080
+      - https_proxy=socks5://vless-proxy:1080
+      - DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=1
+      - NO_PROXY=localhost,127.0.0.1
 #----------------------------------------------------------------
   identity-service:
     build: ./Services/IdentityService/IdentityService
@@ -102,6 +120,46 @@ services:
     depends_on:
       - identity-service
       - jellyfin-service
+      - admin-service
+#----------------------------------------------------------------
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    container_name: transmission
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Vladivostok
+      - TRANSMISSION_WEB_HOME=/combustion-release/
+      - USER=transmission
+      - PASS=transmission
+    volumes:
+      - D:/Jellyfin/config/transmission:/config
+      - D:/Jellyfin/media/torrents:/downloads
+    ports:
+      - "9091:9091"
+      - "51413:51413"
+      - "51413:51413/udp"
+    restart: unless-stopped
+#----------------------------------------------------------------
+  admin-service:
+    build: ./Services/AdminService/AdminService
+    container_name: admin-service
+    volumes:
+      - D:/Jellyfin/media:/media
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=mydb;Username=skazo4nik;Password=qaz123wsx
+      - Jellyfin__Url=http://jellyfin:8096
+      - Jellyfin__ApiKey=28176db7279d476d999a8600efde4b61
+      - Transmission__Url=http://transmission:9091
+      - Transmission__User=transmission
+      - Transmission__Pass=transmission
+    depends_on:
+      postgres:
+        condition: service_healthy
+      jellyfin:
+        condition: service_started
+      transmission:
+        condition: service_started
 #----------------------------------------------------------------
   embedding-service:
     build: ./Services/EmbeddingService/EmbeddingService
@@ -110,11 +168,11 @@ services:
       - "5004:5004"
     environment:
       - Ollama__Url=http://ollama:11434
-      - Clip__Url=http://clip:51000
+      - Clip__Url=http://oclip:11435
     depends_on:
       ollama:
         condition: service_started
-      clip:
+      oclip:
         condition: service_started
 #----------------------------------------------------------------
   ollama:
@@ -124,10 +182,27 @@ services:
       - ollama_data:/root/.ollama
     entrypoint: ["sh", "-c", "ollama serve & sleep 2 && ollama pull nomic-embed-text && wait"]
 #----------------------------------------------------------------
-  clip:
-    image: jinaai/clip-as-service
-    container_name: clip
+  oclip:
+    image: ghcr.io/hoeflechner/oclip:main
+    container_name: oclip
+    restart: unless-stopped
+    ports:
+      - "11435:11435"
+    environment:
+      - MODELNAME=hf-hub:laion/CLIP-ViT-B-32-laion2B-s34B-b79K
+      - DEVICE=cuda
+      - TIMEOUT=300
+    volumes:
+      - clip_cache:/root/.cache/huggingface/hub/
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 #----------------------------------------------------------------
 
 volumes:
   ollama_data:
+  clip_cache:

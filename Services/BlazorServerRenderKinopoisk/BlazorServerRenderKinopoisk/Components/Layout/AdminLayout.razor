@@ -1,0 +1,70 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+@inject TokenStore TokenStore
+@inject AuthService AuthService
+
+<MudThemeProvider Theme="_theme" IsDarkMode="true" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<div class="admin-appbar">
+    <MudTextField @bind-Value="_searchQuery" T="string" Placeholder="Поиск фильмов..."
+                  Immediate="true" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="Variant.Outlined" AdornmentColor="Color.Primary"
+                  OnKeyDown="@HandleSearchKeyDown" Class="admin-search-field" />
+    <MudMenu Class="admin-account-menu">
+        <ActivatorContent>
+            <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Size="@Size.Large" Color="@Color.Primary" OnClick="@context.ToggleAsync" />
+        </ActivatorContent>
+        <ChildContent>
+            <MudMenuItem OnClick="@GoToUsers">
+                <MudIcon Icon="@Icons.Material.Filled.People" Size="@Size.Small" Class="mr-2" />
+                Пользователи
+            </MudMenuItem>
+            <MudDivider />
+            <MudMenuItem OnClick="@LogoutAsync">
+                <MudIcon Icon="@Icons.Material.Filled.Logout" Size="@Size.Small" Class="mr-2" />
+                Выйти
+            </MudMenuItem>
+        </ChildContent>
+    </MudMenu>
+</div>
+
+<div class="admin-content">
+    @Body
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Произошла ошибка.
+    <a href="." class="reload">Перезагрузить</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private string? _searchQuery;
+
+    private void HandleSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !string.IsNullOrWhiteSpace(_searchQuery))
+            Navigation.NavigateTo($"/admin/movies?query={Uri.EscapeDataString(_searchQuery)}");
+    }
+
+    private void GoToUsers() => Navigation.NavigateTo("/admin/users");
+
+    private async Task LogoutAsync()
+    {
+        await TokenStore.ClearAsync();
+        Navigation.NavigateTo("/login");
+    }
+
+    private MudTheme _theme = new()
+    {
+        PaletteDark = new PaletteDark()
+        {
+            Primary = "#F6C516",
+            Background = "#000000",
+            Surface = "#0f0f0f",
+        }
+    };
+}

@@ -5,9 +5,12 @@ public class UserMovieEntity
     public Guid UserId { get; set; }
     public int MovieId { get; set; }
     public string? Status { get; set; }
+    public bool IsFavorite { get; set; }
     public int? Rating { get; set; }
     public DateTime? WatchedAt { get; set; }
     public DateTime CreatedAt { get; set; }
+    public double? LastPositionSeconds { get; set; }
+    public double? DurationSeconds { get; set; }
 
     public UserEntity User { get; set; } = null!;
     public MovieEntity Movie { get; set; } = null!;

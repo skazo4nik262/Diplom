@@ -24,13 +24,22 @@ public class EmbeddingController : ControllerBase
     }
 
     [HttpPost("image")]
-    public async Task<IActionResult> EmbedImage([FromBody] EmbedImageRequest request, CancellationToken ct)
+    public async Task<IActionResult> EmbedImage(IFormFile image, CancellationToken ct)
     {
-        var embedding = await _imageEmbedder.EmbedAsync(request.Url, ct);
+        using var ms = new MemoryStream();
+        await image.CopyToAsync(ms, ct);
+        var bytes = ms.ToArray();
+        var embedding = await _imageEmbedder.EmbedAsync(bytes, ct);
+        return Ok(new EmbedResponse(embedding));
+    }
+
+    [HttpPost("clip-text")]
+    public async Task<IActionResult> EmbedClipText([FromBody] EmbedTextRequest request, CancellationToken ct)
+    {
+        var embedding = await _imageEmbedder.EmbedTextAsync(request.Text, ct);
         return Ok(new EmbedResponse(embedding));
     }
 }
 
 public record EmbedTextRequest(string Text);
-public record EmbedImageRequest(string Url);
 public record EmbedResponse(float[] Embedding);

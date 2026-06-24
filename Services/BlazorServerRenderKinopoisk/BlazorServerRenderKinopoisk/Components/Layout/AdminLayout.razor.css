@@ -1,0 +1,32 @@
+.admin-appbar {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 95%;
+    max-width: 1200px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 24px;
+    background: rgba(15,15,15,0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 16px;
+    z-index: 100;
+}
+
+.admin-search-field {
+    flex: 1;
+    max-width: 50vw;
+    min-width: 200px;
+}
+
+.admin-account-menu {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.admin-content {
+    padding-top: 80px;
+}

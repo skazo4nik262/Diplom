@@ -9,11 +9,13 @@ public class MoviesController : ControllerBase
 {
     private readonly IPostgresService _postgres;
     private readonly ITmdbService _tmdb;
+    private readonly EmbeddingGeneratorService _embeddingGenerator;
 
-    public MoviesController(IPostgresService postgres, ITmdbService tmdb)
+    public MoviesController(IPostgresService postgres, ITmdbService tmdb, EmbeddingGeneratorService embeddingGenerator)
     {
         _postgres = postgres;
         _tmdb = tmdb;
+        _embeddingGenerator = embeddingGenerator;
     }
 
     private Guid GetUserId()
@@ -27,7 +29,12 @@ public class MoviesController : ControllerBase
     public async Task<IActionResult> GetMovie(int tmdbId)
     {
         var movie = await _postgres.GetMovieWithDetailsAsync(tmdbId);
-        if (movie is not null) return Ok(movie);
+        if (movie is not null)
+        {
+            if (movie.Keywords is null || movie.Keywords.Count == 0)
+                await TryAttachKeywordsAsync(tmdbId);
+            return Ok(movie);
+        }
 
         var tmdbMovie = await _tmdb.GetMovieFullDetailsAsync(tmdbId);
         if (tmdbMovie is null) return NotFound();
@@ -35,6 +42,17 @@ public class MoviesController : ControllerBase
         await _postgres.AddMovie(tmdbMovie);
         movie = await _postgres.GetMovieWithDetailsAsync(tmdbId);
         return Ok(movie);
+    }
+
+    private async Task TryAttachKeywordsAsync(int tmdbId)
+    {
+        try
+        {
+            var full = await _tmdb.GetMovieFullDetailsAsync(tmdbId);
+            if (full?.Keywords?.Keywords?.Count > 0)
+                await _postgres.AttachKeywordsAsync(tmdbId, full.Keywords.Keywords);
+        }
+        catch { }
     }
 
     [HttpGet("{tmdbId:int}/cast")]
@@ -92,17 +110,33 @@ public class MoviesController : ControllerBase
     }
 
     [HttpGet("{tmdbId:int}/similar")]
-    public async Task<IActionResult> GetSimilar(int tmdbId, [FromQuery] int page = 1)
+    public async Task<IActionResult> GetSimilar(int tmdbId, [FromQuery] int page = 1, [FromQuery] bool useImage = false)
     {
-        var similar = await _postgres.GetSimilarMoviesAsync(tmdbId, page);
+        var similar = await _postgres.GetSimilarMoviesAsync(tmdbId, page, useImage);
         return Ok(similar);
     }
 
     [HttpPost("embeddings/generate-missing")]
-    public async Task<IActionResult> GenerateMissingEmbeddings()
+    public IActionResult GenerateMissingEmbeddings()
     {
-        var result = await _postgres.RebuildAllEmbeddingsAsync();
-        return Ok(result);
+        var message = _embeddingGenerator.StartGeneration(regenerateAll: false);
+        var status = _embeddingGenerator.GetStatus();
+        return Ok(new { message, status });
+    }
+
+    [HttpPost("embeddings/regenerate-all")]
+    public IActionResult RegenerateAllEmbeddings()
+    {
+        var message = _embeddingGenerator.StartGeneration(regenerateAll: true);
+        var status = _embeddingGenerator.GetStatus();
+        return Ok(new { message, status });
+    }
+
+    [HttpGet("embeddings/status")]
+    public IActionResult GetEmbeddingStatus()
+    {
+        var status = _embeddingGenerator.GetStatus();
+        return Ok(status);
     }
 
     [HttpGet("search")]
@@ -142,7 +176,7 @@ public class MoviesController : ControllerBase
 
             foreach (var searchMovie in tmdbResults.Results)
             {
-                var movie = await _tmdb.GetMovieFullDetailsAsync(searchMovie.Id);
+                var movie = await _tmdb.GetMovieDetailsAsync(searchMovie.Id);
                 if (movie is not null)
                     await _postgres.AddMovie(movie);
             }
@@ -154,6 +188,16 @@ public class MoviesController : ControllerBase
             return StatusCode(503);
         }
 
+        return Ok(results);
+    }
+
+    [HttpGet("search-by-image")]
+    public async Task<IActionResult> SearchByImage([FromQuery] string query, [FromQuery] int page = 1, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return BadRequest("Query is required");
+
+        var results = await _postgres.SearchByImageAsync(query, page, ct);
         return Ok(results);
     }
 
@@ -179,13 +223,23 @@ public class MoviesController : ControllerBase
     }
 
     [HttpGet("recommendations")]
-    public async Task<IActionResult> GetRecommendations([FromQuery] int page = 1)
+    public async Task<IActionResult> GetRecommendations([FromQuery] int page = 1, [FromQuery] bool useImage = false)
     {
         var userId = GetUserId();
         if (userId == Guid.Empty) return Unauthorized();
 
-        var recommendations = await _postgres.GetRecommendationsAsync(userId, page);
+        var recommendations = await _postgres.GetRecommendationsAsync(userId, page, useImage);
         return Ok(recommendations);
+    }
+
+    [HttpGet("mood/{mood}")]
+    public async Task<IActionResult> GetMoodMovies(string mood, [FromQuery] int page = 1)
+    {
+        if (string.IsNullOrWhiteSpace(mood))
+            return BadRequest("Mood is required");
+
+        var results = await _postgres.GetMoodMoviesAsync(mood, page);
+        return Ok(results);
     }
 
     [HttpGet("{tmdbId:int}/rating-distribution")]

@@ -8,7 +8,11 @@ public class UserBriefDto
     [JsonPropertyName("login")] public string? Login { get; set; }
     [JsonPropertyName("username")] public string? Username { get; set; }
     [JsonPropertyName("avatarUrl")] public string? AvatarUrl { get; set; }
+    [JsonPropertyName("role")] public int Role { get; set; }
+    [JsonPropertyName("isActive")] public bool IsActive { get; set; } = true;
     public string DisplayName => Username ?? Login ?? "User";
+    public bool IsAdmin => Role == 0;
+    public bool IsBlocked => !IsActive;
 }
 
 public class FollowStatusDto
@@ -61,7 +65,7 @@ public class NotificationItemDto
 {
     [JsonPropertyName("id")] public Guid Id { get; set; }
     [JsonPropertyName("eventType")] public string? EventType { get; set; }
-    [JsonPropertyName("actorId")] public Guid ActorId { get; set; }
+    [JsonPropertyName("actorId")] public Guid? ActorId { get; set; }
     [JsonPropertyName("movieId")] public int? MovieId { get; set; }
     [JsonPropertyName("reviewId")] public string? ReviewId { get; set; }
     [JsonPropertyName("playlistId")] public int? PlaylistId { get; set; }
@@ -74,6 +78,9 @@ public class NotificationItemDto
         "review_liked" => "оценил вашу рецензию",
         "comment_added" => "прокомментировал вашу рецензию",
         "followed_user" => "подписался на вас",
+        "new_in_collection" => "Вышел новый фильм в коллекции",
+        "video_added" => "Добавлен новый трейлер",
+        "file_added" => "Фильм доступен для просмотра",
         _ => EventType ?? ""
     };
 }
@@ -82,6 +89,13 @@ public class NotificationListDto
 {
     [JsonPropertyName("items")] public List<NotificationItemDto> Items { get; set; } = [];
     [JsonPropertyName("unreadCount")] public int UnreadCount { get; set; }
+}
+
+public class NotificationSettingsDto
+{
+    [JsonPropertyName("notifyNewInCollection")] public bool NotifyNewInCollection { get; set; } = true;
+    [JsonPropertyName("notifyVideoAdded")] public bool NotifyVideoAdded { get; set; } = true;
+    [JsonPropertyName("notifyFileAdded")] public bool NotifyFileAdded { get; set; } = true;
 }
 
 public class DiaryEntryDto

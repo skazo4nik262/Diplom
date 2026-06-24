@@ -54,7 +54,7 @@
             return;
         }
 
-        await TokenStore.SaveAsync(result.Token);
+        await TokenStore.SaveAsync(result.Token, result.RefreshToken);
         Navigation.NavigateTo("/main");
     }
 }

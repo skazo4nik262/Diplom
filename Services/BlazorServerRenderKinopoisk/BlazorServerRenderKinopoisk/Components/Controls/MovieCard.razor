@@ -9,13 +9,22 @@
         <div class="movie-rating-badge@(Movie.VoteAverage > 7.0 ? " high-rating" : "")">
             @Movie.RatingText
         </div>
-        @if (UserStatus?.Status is not null && UserStatus.Status != "favorite")
+        @if (UserStatus?.Status is not null)
         {
             <div class="movie-status-badge status-@UserStatus.Status">@StatusText(UserStatus.Status)</div>
+        }
+        @if (UserStatus?.IsFavorite == true)
+        {
+            <div class="movie-favorite-badge">♥</div>
         }
         @if (UserStatus?.Rating is not null)
         {
             <div class="movie-user-rating-badge">@UserStatus.Rating.Value</div>
+        }
+        @if (UserStatus?.DurationSeconds > 0 && UserStatus?.LastPositionSeconds > 0)
+        {
+            var progress = Math.Min(UserStatus.LastPositionSeconds.Value / UserStatus.DurationSeconds.Value * 100, 100);
+            <div class="movie-progress-bar"><div class="movie-progress-fill" style="width: @($"{progress:F0}%")"></div></div>
         }
     </div>
     <div class="movie-title">@Movie.Title</div>

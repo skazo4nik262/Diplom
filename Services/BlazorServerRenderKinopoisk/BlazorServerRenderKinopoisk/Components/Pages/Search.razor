@@ -21,14 +21,18 @@
     }
     else if (!isLoading)
     {
-        @if (!string.IsNullOrWhiteSpace(query))
+        @if (!string.IsNullOrWhiteSpace(_searchText))
         {
-            <MudText Typo="Typo.h5" Class="mb-4">Результаты поиска: "@query"</MudText>
+            <MudText Typo="Typo.h5" Class="mb-4">Результаты поиска: "@_searchText"</MudText>
         }
         else if (_selectedGenreIds.Count > 0)
         {
-            var names = string.Join(", ", CatalogService.Genres.Where(g => _selectedGenreIds.Contains(g.Id)).Select(g => g.Name));
+            var names = string.Join(", ", _genres.Where(g => _selectedGenreIds.Contains(g.Id)).Select(g => g.Name));
             <MudText Typo="Typo.h5" Class="mb-4">Жанр: @names</MudText>
+        }
+        else if (_selectedMood is not null && _moods.TryGetValue(_selectedMood, out var moodLabel))
+        {
+            <MudText Typo="Typo.h5" Class="mb-4">Настроение: @moodLabel</MudText>
         }
 
         @if (_person is not null)
@@ -58,8 +62,29 @@
             </div>
         }
 
+        <div class="mood-filter">
+            @foreach (var mood in _moods)
+            {
+                <button class="mood-chip@(_selectedMood == mood.Key ? " selected" : "")"
+                        @onclick="() => SelectMood(mood.Key)">
+                    @mood.Value
+                </button>
+            }
+        </div>
+
+        <div class="search-text-row">
+            <MudTextField @bind-Value="_searchText"
+                          T="string"
+                          Placeholder="Поиск фильмов, людей, плейлистов..."
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyDown="@HandleSearchKeyDown"
+                          Class="search-page-input flex-grow-1" />
+        </div>
+
         <div class="genre-filter">
-            @foreach (var genre in CatalogService.Genres)
+            @foreach (var genre in _genres)
             {
                 <button class="genre-chip@(_selectedGenreIds.Contains(genre.Id) ? " selected" : "")"
                         @onclick="() => ToggleGenre(genre.Id)">
@@ -69,45 +94,62 @@
         </div>
 
         <div class="search-filters">
-            <div class="search-filter-group">
-                <span class="search-filter-label">Год</span>
-                <div class="search-filter-row">
-                    <input type="number" class="search-filter-input" @bind="_yearFrom" placeholder="от" min="1900" max="2030" />
-                    <span class="search-filter-sep">—</span>
-                    <input type="number" class="search-filter-input" @bind="_yearTo" placeholder="до" min="1900" max="2030" />
+            <div class="filter-slider-group">
+                <div class="filter-slider-header">
+                    <span class="filter-slider-label">Год</span>
+                    <span class="filter-slider-values">@(_yearFrom) — @(_yearTo)</span>
+                </div>
+                <div class="range-slider">
+                    <input type="range" class="range-min" min="1900" max="2030" step="1"
+                           @bind-value="_yearFrom" @bind-value:event="oninput" />
+                    <input type="range" class="range-max" min="1900" max="2030" step="1"
+                           @bind-value="_yearTo" @bind-value:event="oninput" />
                 </div>
             </div>
-            <div class="search-filter-group">
-                <span class="search-filter-label">Рейтинг</span>
-                <div class="search-filter-row">
-                    <input type="number" class="search-filter-input" @bind="_ratingFrom" placeholder="от" min="0" max="10" step="0.1" />
-                    <span class="search-filter-sep">—</span>
-                    <input type="number" class="search-filter-input" @bind="_ratingTo" placeholder="до" min="0" max="10" step="0.1" />
+            <div class="filter-slider-group">
+                <div class="filter-slider-header">
+                    <span class="filter-slider-label">Рейтинг</span>
+                    <span class="filter-slider-values">@_ratingFrom.ToString("F1") — @_ratingTo.ToString("F1")</span>
+                </div>
+                <div class="range-slider">
+                    <input type="range" class="range-min" min="0" max="10" step="0.1"
+                           @bind-value="_ratingFrom" @bind-value:event="oninput" />
+                    <input type="range" class="range-max" min="0" max="10" step="0.1"
+                           @bind-value="_ratingTo" @bind-value:event="oninput" />
                 </div>
             </div>
-            <div class="search-filter-group">
-                <span class="search-filter-label">Длительность (мин)</span>
-                <div class="search-filter-row">
-                    <input type="number" class="search-filter-input" @bind="_runtimeFrom" placeholder="от" min="0" max="600" />
-                    <span class="search-filter-sep">—</span>
-                    <input type="number" class="search-filter-input" @bind="_runtimeTo" placeholder="до" min="0" max="600" />
+            <div class="filter-slider-group">
+                <div class="filter-slider-header">
+                    <span class="filter-slider-label">Длительность</span>
+                    <span class="filter-slider-values">@FormatRuntime(_runtimeFrom) — @FormatRuntime(_runtimeTo)</span>
+                </div>
+                <div class="range-slider">
+                    <input type="range" class="range-min" min="0" max="600" step="10"
+                           @bind-value="_runtimeFrom" @bind-value:event="oninput" />
+                    <input type="range" class="range-max" min="0" max="600" step="10"
+                           @bind-value="_runtimeTo" @bind-value:event="oninput" />
                 </div>
             </div>
-            <div class="search-filter-group">
-                <span class="search-filter-label">Сортировка</span>
-                <select class="search-filter-select" @bind="_sortBy">
-                    <option value="">По популярности</option>
-                    <option value="rating">По рейтингу</option>
-                    <option value="year">По году</option>
-                    <option value="title">По названию</option>
-                    <option value="runtime">По длительности</option>
-                </select>
-                <select class="search-filter-select" @bind="_sortOrder" style="margin-left: 4px; width: auto;">
-                    <option value="desc">↓</option>
-                    <option value="asc">↑</option>
-                </select>
+            <div class="filter-slider-group">
+                <div class="filter-slider-header">
+                    <span class="filter-slider-label">Сортировка</span>
+                </div>
+                <div class="filter-sort-row">
+                    <select class="filter-sort-select" @bind="_sortBy">
+                        <option value="">По популярности</option>
+                        <option value="rating">По рейтингу</option>
+                        <option value="year">По году</option>
+                        <option value="title">По названию</option>
+                        <option value="runtime">По длительности</option>
+                    </select>
+                    <select class="filter-sort-select" @bind="_sortOrder">
+                        <option value="desc">↓</option>
+                        <option value="asc">↑</option>
+                    </select>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@ApplyFilters" Size="Size.Small">Применить</MudButton>
+                    <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="@ResetFilters" Size="Size.Small">Сброс</MudButton>
+                </div>
             </div>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@ApplyFilters" Class="search-filter-apply">Применить</MudButton>
         </div>
 
         @if (movies.Count == 0 && !_hasTmdbError)
@@ -149,26 +191,53 @@
 </div>
 
 @code {
-    [SupplyParameterFromQuery] public string? Query { get; set; }
-    [SupplyParameterFromQuery] public string? GenreIds { get; set; }
+    [SupplyParameterFromQuery(Name = "query")] public string? Query { get; set; }
+    [SupplyParameterFromQuery(Name = "GenreIds")] public string? GenreIds { get; set; }
+    [SupplyParameterFromQuery(Name = "Multimodal")] public bool Multimodal { get; set; }
+    [SupplyParameterFromQuery(Name = "mood")] public string? Mood { get; set; }
+    [SupplyParameterFromQuery(Name = "yearFrom")] public int? YearFrom { get; set; }
+    [SupplyParameterFromQuery(Name = "yearTo")] public int? YearTo { get; set; }
+    [SupplyParameterFromQuery(Name = "ratingFrom")] public double? RatingFrom { get; set; }
+    [SupplyParameterFromQuery(Name = "ratingTo")] public double? RatingTo { get; set; }
+    [SupplyParameterFromQuery(Name = "runtimeFrom")] public int? RuntimeFrom { get; set; }
+    [SupplyParameterFromQuery(Name = "runtimeTo")] public int? RuntimeTo { get; set; }
+    [SupplyParameterFromQuery(Name = "sortBy")] public string? SortBy { get; set; }
+    [SupplyParameterFromQuery(Name = "sortOrder")] public string? SortOrder { get; set; }
 
     private bool _hasTmdbError;
     private List<MovieDto> movies = [];
-    private string? query;
+    private string _searchText = "";
     private bool isLoading = true;
     private int _page = 1;
     private bool _hasMore = true;
     private bool _isLoadingMore;
     private DotNetObjectReference<Search>? _dotNetRef;
     private bool _initialized;
+    private bool _suppressUrlRestore;
     private HashSet<int> _selectedGenreIds = [];
+    private List<GenreDto> _genres = [];
+    private bool _smartSearch;
+    private string? _selectedMood;
+    private static readonly Dictionary<string, string> _moods = new()
+    {
+        ["sad"] = "Грустное",
+        ["happy"] = "Веселое",
+        ["romantic"] = "Романтичное",
+        ["scary"] = "Страшное",
+        ["inspiring"] = "Мотивирующее",
+        ["mysterious"] = "Загадочное",
+        ["epic"] = "Эпическое",
+        ["touching"] = "Трогательное",
+        ["atmospheric"] = "Атмосферное",
+        ["crazy"] = "Безумное"
+    };
 
-    private int? _yearFrom;
-    private int? _yearTo;
-    private double? _ratingFrom;
-    private double? _ratingTo;
-    private int? _runtimeFrom;
-    private int? _runtimeTo;
+    private int _yearFrom = 1900;
+    private int _yearTo = 2030;
+    private double _ratingFrom;
+    private double _ratingTo = 10;
+    private int _runtimeFrom;
+    private int _runtimeTo = 600;
     private string _sortBy = "";
     private string _sortOrder = "desc";
 
@@ -186,8 +255,13 @@
             return;
         }
 
+        _genres = await Catalog.GetGenresAsync();
         _initialized = true;
+        _searchText = Query ?? "";
+        _smartSearch = Multimodal;
+        _suppressUrlRestore = true;
         ParseGenreIds();
+        await RestoreFromUrlParams();
         await DoSearch();
 
         if (_hasMore && movies.Count > 0)
@@ -199,15 +273,17 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        _searchText = Query ?? "";
         if (!_initialized) return;
-        var changed = Query != query;
-        ParseGenreIds();
-        if (changed)
-            await DoSearch();
+        if (_suppressUrlRestore) { _suppressUrlRestore = false; return; }
+
+        await RestoreFromUrlParams();
+        await DoSearch();
     }
 
     private void ParseGenreIds()
     {
+        _selectedGenreIds.Clear();
         if (string.IsNullOrWhiteSpace(GenreIds)) return;
         foreach (var part in GenreIds.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -223,16 +299,93 @@
         await DoSearch();
     }
 
+    private async Task SelectMood(string mood)
+    {
+        _selectedMood = _selectedMood == mood ? null : mood;
+        await DoSearch();
+    }
+
     private async Task ApplyFilters()
     {
+        _suppressUrlRestore = true;
+        Navigation.NavigateTo(BuildFilterUrl(), replace: true);
         await DoSearch();
+    }
+
+    private async Task HandleSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+            await ApplyFilters();
+    }
+
+    private async Task ResetFilters()
+    {
+        _yearFrom = 1900;
+        _yearTo = 2030;
+        _ratingFrom = 0;
+        _ratingTo = 10;
+        _runtimeFrom = 0;
+        _runtimeTo = 600;
+        _sortBy = "";
+        _sortOrder = "desc";
+        _selectedGenreIds.Clear();
+        _selectedMood = null;
+        _searchText = "";
+        _suppressUrlRestore = true;
+        Navigation.NavigateTo("/search", replace: true);
+        await DoSearch();
+    }
+
+    private async Task RestoreFromUrlParams()
+    {
+        _searchText = Query ?? "";
+        _smartSearch = Multimodal;
+        _selectedMood = Mood;
+        ParseGenreIds();
+        _yearFrom = YearFrom ?? 1900;
+        _yearTo = YearTo ?? 2030;
+        _ratingFrom = RatingFrom ?? 0;
+        _ratingTo = RatingTo ?? 10;
+        _runtimeFrom = RuntimeFrom ?? 0;
+        _runtimeTo = RuntimeTo ?? 600;
+        _sortBy = SortBy ?? "";
+        _sortOrder = SortOrder ?? "desc";
+    }
+
+    private string BuildFilterUrl()
+    {
+        var p = new List<string>();
+        if (!string.IsNullOrWhiteSpace(_searchText))
+            p.Add($"query={Uri.EscapeDataString(_searchText)}");
+        if (_selectedGenreIds.Count > 0)
+            p.Add($"GenreIds={string.Join(",", _selectedGenreIds)}");
+        if (_selectedMood is not null)
+            p.Add($"mood={Uri.EscapeDataString(_selectedMood)}");
+        if (_smartSearch)
+            p.Add("Multimodal=true");
+        if (_yearFrom != 1900) p.Add($"yearFrom={_yearFrom}");
+        if (_yearTo != 2030) p.Add($"yearTo={_yearTo}");
+        if (_ratingFrom != 0) p.Add($"ratingFrom={_ratingFrom:F1}");
+        if (_ratingTo != 10) p.Add($"ratingTo={_ratingTo:F1}");
+        if (_runtimeFrom != 0) p.Add($"runtimeFrom={_runtimeFrom}");
+        if (_runtimeTo != 600) p.Add($"runtimeTo={_runtimeTo}");
+        if (!string.IsNullOrEmpty(_sortBy)) p.Add($"sortBy={Uri.EscapeDataString(_sortBy)}");
+        if (!string.IsNullOrEmpty(_sortOrder) && _sortOrder != "desc") p.Add($"sortOrder={Uri.EscapeDataString(_sortOrder)}");
+        return "/search" + (p.Count > 0 ? "?" + string.Join("&", p) : "");
+    }
+
+    private static string FormatRuntime(int minutes)
+    {
+        if (minutes <= 0) return "0 мин";
+        if (minutes >= 600) return "600+ мин";
+        if (minutes >= 60) return $"{minutes / 60}ч {minutes % 60}м";
+        return $"{minutes} мин";
     }
 
     private async Task DoSearch()
     {
-        query = Query;
-        if (string.IsNullOrWhiteSpace(query) && _selectedGenreIds.Count == 0
-            && !_yearFrom.HasValue && !_yearTo.HasValue && !_ratingFrom.HasValue && !_ratingTo.HasValue)
+        if (string.IsNullOrWhiteSpace(_searchText) && _selectedGenreIds.Count == 0 && _selectedMood is null
+            && _yearFrom == 1900 && _yearTo == 2030 && _ratingFrom == 0 && _ratingTo == 10)
         {
             isLoading = false;
             movies = [];
@@ -257,27 +410,48 @@
             return;
         }
 
+        if (_selectedMood is not null)
+        {
+            movies = await Catalog.SearchByMoodAsync(_selectedMood, _page);
+            _hasMore = movies.Count > 0;
+            isLoading = false;
+            return;
+        }
+
+        if (_smartSearch)
+        {
+            movies = await Catalog.SearchByImageAsync(_searchText, _page);
+            _hasMore = movies.Count > 0;
+            isLoading = false;
+            return;
+        }
+
         try
         {
-            if (!string.IsNullOrWhiteSpace(query))
+            if (!string.IsNullOrWhiteSpace(_searchText))
             {
-                var personTask = Catalog.SearchPersonAsync(query);
+                var personTask = Catalog.SearchPersonAsync(_searchText);
                 var playlistsTask = Catalog.GetPlaylistsAsync();
                 await Task.WhenAll(personTask, playlistsTask);
 
                 _person = personTask.Result;
 
                 var allPlaylists = playlistsTask.Result;
-                var q = query.ToLower();
+                var q = _searchText.ToLower();
                 _filteredPlaylists = allPlaylists
                     .Where(p => p.Name is not null && p.Name.ToLower().Contains(q))
                     .ToList();
             }
 
             var genreParam = _selectedGenreIds.Count > 0 ? string.Join(",", _selectedGenreIds) : null;
-            movies = await Catalog.SearchAsync(query, _page, genreParam,
-                _yearFrom, _yearTo, _ratingFrom, _ratingTo,
-                _runtimeFrom, _runtimeTo, _sortBy, _sortOrder);
+            movies = await Catalog.SearchAsync(_searchText, _page, genreParam,
+                _yearFrom != 1900 ? _yearFrom : null,
+                _yearTo != 2030 ? _yearTo : null,
+                _ratingFrom != 0 ? _ratingFrom : null,
+                _ratingTo != 10 ? _ratingTo : null,
+                _runtimeFrom != 0 ? _runtimeFrom : null,
+                _runtimeTo != 600 ? _runtimeTo : null,
+                _sortBy, _sortOrder);
             _hasMore = movies.Count > 0;
             _hasTmdbError = false;
         }
@@ -306,10 +480,26 @@
         List<MovieDto>? newMovies;
         try
         {
-            var genreParam = _selectedGenreIds.Count > 0 ? string.Join(",", _selectedGenreIds) : null;
-            newMovies = await Catalog.SearchAsync(query, _page, genreParam,
-                _yearFrom, _yearTo, _ratingFrom, _ratingTo,
-                _runtimeFrom, _runtimeTo, _sortBy, _sortOrder);
+            if (_selectedMood is not null)
+            {
+                newMovies = await Catalog.SearchByMoodAsync(_selectedMood, _page);
+            }
+            else if (_smartSearch)
+            {
+                newMovies = await Catalog.SearchByImageAsync(_searchText, _page);
+            }
+            else
+            {
+                var genreParam = _selectedGenreIds.Count > 0 ? string.Join(",", _selectedGenreIds) : null;
+                newMovies = await Catalog.SearchAsync(_searchText, _page, genreParam,
+                    _yearFrom != 1900 ? _yearFrom : null,
+                    _yearTo != 2030 ? _yearTo : null,
+                    _ratingFrom != 0 ? _ratingFrom : null,
+                    _ratingTo != 10 ? _ratingTo : null,
+                    _runtimeFrom != 0 ? _runtimeFrom : null,
+                    _runtimeTo != 600 ? _runtimeTo : null,
+                    _sortBy, _sortOrder);
+            }
         }
         catch (InvalidOperationException) { _isLoadingMore = false; _hasTmdbError = true; StateHasChanged(); return; }
         catch { _isLoadingMore = false; return; }

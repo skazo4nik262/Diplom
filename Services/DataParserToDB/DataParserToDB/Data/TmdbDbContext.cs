@@ -34,10 +34,15 @@ public class TmdbDbContext : DbContext
     public DbSet<UserTasteEntity> UserTaste => Set<UserTasteEntity>();
     public DbSet<UserFollowEntity> UserFollows => Set<UserFollowEntity>();
     public DbSet<ActivityEventEntity> ActivityEvents => Set<ActivityEventEntity>();
+    public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
+    public DbSet<MovieFileEntity> MovieFiles => Set<MovieFileEntity>();
+    public DbSet<DownloadJobEntity> DownloadJobs => Set<DownloadJobEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasPostgresExtension("vector");
+
         modelBuilder.Entity<MovieEntity>(entity =>
         {
             entity.ToTable("Movies");
@@ -236,6 +241,7 @@ public class TmdbDbContext : DbContext
             entity.ToTable("Keywords");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsUnicode().HasMaxLength(200);
+            entity.Property(e => e.NameRu).IsUnicode().HasMaxLength(200);
             entity.HasIndex(e => e.Name);
         });
 
@@ -396,6 +402,10 @@ public class TmdbDbContext : DbContext
             entity.Property(e => e.PasswordHash).HasColumnName("user_password").HasMaxLength(500);
             entity.Property(e => e.Role).HasColumnName("user_role").HasDefaultValue(1);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.TokenVersion).HasDefaultValue(1);
+            entity.Property(e => e.NotifyNewInCollection).HasDefaultValue(true);
+            entity.Property(e => e.NotifyVideoAdded).HasDefaultValue(true);
+            entity.Property(e => e.NotifyFileAdded).HasDefaultValue(true);
             entity.HasIndex(e => e.Login).IsUnique();
         });
 
@@ -404,6 +414,7 @@ public class TmdbDbContext : DbContext
             entity.ToTable("UserMovies");
             entity.HasKey(e => new { e.UserId, e.MovieId });
             entity.Property(e => e.Status).HasMaxLength(200);
+            entity.Property(e => e.IsFavorite).HasDefaultValue(false);
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.MovieId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -429,6 +440,7 @@ public class TmdbDbContext : DbContext
             entity.ToTable("MovieEmbeddings");
             entity.HasKey(e => e.MovieId);
             entity.Property(e => e.Embedding);
+            entity.Property(e => e.ImageEmbedding);
             entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.MovieId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -468,6 +480,36 @@ public class TmdbDbContext : DbContext
             entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.MovieId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => new { e.UserId, e.IsRead });
+        });
+
+        modelBuilder.Entity<MovieFileEntity>(entity =>
+        {
+            entity.ToTable("MovieFiles");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FileName).HasMaxLength(500);
+            entity.Property(e => e.FilePath).HasMaxLength(1000);
+            entity.HasIndex(e => e.TmdbId);
+            entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.TmdbId).HasPrincipalKey(m => m.Id).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DownloadJobEntity>(entity =>
+        {
+            entity.ToTable("DownloadJobs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.MagnetUrl).HasMaxLength(2000);
+            entity.Property(e => e.Status).HasMaxLength(50).HasDefaultValue("downloading");
+            entity.HasIndex(e => e.TmdbId);
+            entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.TmdbId).HasPrincipalKey(m => m.Id).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RefreshTokenEntity>(entity =>
+        {
+            entity.ToTable("RefreshTokens");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Token).HasMaxLength(500);
+            entity.HasIndex(e => e.Token).IsUnique();
+            entity.HasIndex(e => e.UserId);
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -1,0 +1,379 @@
+@page "/admin/movies"
+@implements IDisposable
+@layout AdminLayout
+@rendermode InteractiveServer
+@inject CatalogService Catalog
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="admin-page">
+    @if (!TokenStore.IsAdmin)
+    {
+        <MudText Typo="Typo.h5" Class="mt-8" Style="text-align: center; opacity: 0.5;">Доступ запрещён</MudText>
+        return;
+    }
+
+    <div class="admin-toolbar">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   OnClick="@StartScan" Disabled="@(_scanStatus?.IsRunning == true)">
+            Сканировать библиотеку
+        </MudButton>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+                   OnClick="@StartEmbeddings" Disabled="@(_embeddingStatus?.IsRunning == true)">
+            Сгенерировать эмбеддинги
+        </MudButton>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Warning"
+                   OnClick="@StartRegenerateAll" Disabled="@(_embeddingStatus?.IsRunning == true)">
+            Перегенерировать все эмбеддинги
+        </MudButton>
+
+        @if (_embeddingStatus?.IsRunning == true)
+        {
+            <MudProgressLinear Indeterminate Class="admin-scan-progress" />
+            <MudText Typo="Typo.body2" Class="admin-scan-info">
+                Эмбеддинги: @_embeddingStatus.Processed из @_embeddingStatus.Total
+                @if (_embeddingStatus.Errors > 0)
+                {
+                    <span>(ошибок: @_embeddingStatus.Errors)</span>
+                }
+            </MudText>
+        }
+        else if (_embeddingStatus?.IsComplete == true)
+        {
+            <MudAlert Severity="@(_embeddingStatus.Errors > 0 ? Severity.Warning : Severity.Success)"
+                      Class="admin-scan-result" Dense="true">
+                Эмбеддинги: обработано @_embeddingStatus.Processed из @_embeddingStatus.Total
+                @if (_embeddingStatus.Errors > 0)
+                {
+                    <span>, ошибок: @_embeddingStatus.Errors</span>
+                }
+            </MudAlert>
+        }
+
+        @if (_scanStatus?.IsRunning == true)
+        {
+            <MudProgressLinear Indeterminate Class="admin-scan-progress" />
+            <MudText Typo="Typo.body2" Class="admin-scan-info">
+                Обработано @_scanStatus.Processed из @_scanStatus.FilesFound
+                (@_scanStatus.NewRecords новых записей)
+            </MudText>
+        }
+        else if (_scanStatus?.IsComplete == true)
+        {
+            <MudAlert Severity="@(_scanStatus.Errors.Count > 0 ? Severity.Warning : Severity.Success)"
+                      Class="admin-scan-result" Dense="true">
+                Сканирование завершено: найдено @_scanStatus.FilesFound файлов,
+                создано @_scanStatus.NewRecords новых записей.
+                @if (_scanStatus.Errors.Count > 0)
+                {
+                    <span>Ошибок: @_scanStatus.Errors.Count</span>
+                }
+            </MudAlert>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <div class="admin-grid">
+            @for (var i = 0; i < 8; i++)
+            {
+                <div class="admin-card skeleton">
+                    <div class="admin-card-poster skeleton-box"></div>
+                    <div class="admin-card-body">
+                        <div class="skeleton-text" style="width: 80%"></div>
+                        <div class="skeleton-text" style="width: 40%"></div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (_movies.Count > 0)
+    {
+        <div class="admin-grid">
+            @foreach (var movie in _movies)
+            {
+                var downloading = _sendingIds.Contains(movie.Id);
+                var fileInfo = _fileCache.GetValueOrDefault(movie.Id);
+
+                <div class="admin-card">
+                    <div class="admin-card-poster" style="background-image: url('@movie.PosterUrl')"></div>
+                    <div class="admin-card-body">
+                        <div class="admin-card-title">@movie.Title</div>
+                        <div class="admin-card-meta">
+                            <span>@movie.ReleaseYear</span>
+                            <span class="admin-card-rating">@movie.RatingText</span>
+                        </div>
+                        @if (fileInfo is not null && fileInfo.IsReady)
+                        {
+                            <div class="admin-card-status status-ready">Готово</div>
+                        }
+                        else if (fileInfo is not null && !fileInfo.IsReady)
+                        {
+                            <div class="admin-card-status status-processing">Обрабатывается</div>
+                        }
+                        else
+                        {
+                            <div class="admin-card-download">
+                                <input type="text" class="admin-magnet-input"
+                                       placeholder="magnet-ссылка..."
+                                       @bind="_magnetInputs[movie.Id]"
+                                       disabled="@downloading" />
+                                <button class="admin-download-btn"
+                                        @onclick="() => Download(movie.Id)"
+                                        disabled="@(downloading || string.IsNullOrWhiteSpace(_magnetInputs.GetValueOrDefault(movie.Id)))">
+                                    @(downloading ? "..." : "Скачать")
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (_hasMore)
+        {
+            <div class="admin-load-more">
+                @if (_loadingMore)
+                {
+                    <MudProgressCircular Indeterminate Size="Size.Small" />
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@LoadMore">Загрузить ещё</MudButton>
+                }
+            </div>
+        }
+    }
+    else if (_hasSearched)
+    {
+        <MudText Typo="Typo.h6" Class="mt-8" Style="text-align: center; opacity: 0.5;">Фильмы не найдены</MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.h6" Class="mt-8" Style="text-align: center; opacity: 0.3;">Введите название для поиска</MudText>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Query { get; set; }
+
+    private List<MovieDto> _movies = [];
+    private Dictionary<int, string> _magnetInputs = [];
+    private HashSet<int> _sendingIds = [];
+    private Dictionary<int, MovieFileDto?> _fileCache = [];
+    private bool _loading;
+    private bool _loadingMore;
+    private bool _hasMore;
+    private bool _hasSearched;
+    private int _page = 1;
+    private string? _prevQuery;
+
+    private ScanStatusDto? _scanStatus;
+    private CancellationTokenSource? _scanCts;
+
+    private EmbeddingGeneratorStatusDto? _embeddingStatus;
+    private CancellationTokenSource? _embeddingCts;
+
+    private async Task StartEmbeddings()
+    {
+        var msg = await Catalog.StartEmbeddingGenerationAsync(regenerateAll: false);
+        if (msg != null)
+        {
+            _embeddingStatus = new EmbeddingGeneratorStatusDto { IsRunning = true };
+            _ = PollEmbeddingStatusAsync();
+        }
+        await JS.InvokeVoidAsync("showToast", msg ?? "Ошибка запуска генерации");
+    }
+
+    private async Task StartRegenerateAll()
+    {
+        var msg = await Catalog.StartEmbeddingGenerationAsync(regenerateAll: true);
+        if (msg != null)
+        {
+            _embeddingStatus = new EmbeddingGeneratorStatusDto { IsRunning = true };
+            _ = PollEmbeddingStatusAsync();
+        }
+        await JS.InvokeVoidAsync("showToast", msg ?? "Ошибка запуска перегенерации");
+    }
+
+    private async Task PollEmbeddingStatusAsync()
+    {
+        _embeddingCts?.Cancel();
+        _embeddingCts = new CancellationTokenSource();
+        var ct = _embeddingCts.Token;
+
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(2000, ct);
+
+                var status = await Catalog.GetEmbeddingStatusAsync();
+                if (status == null) break;
+
+                _embeddingStatus = status;
+                await InvokeAsync(StateHasChanged);
+
+                if (!status.IsRunning)
+                    break;
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task StartScan()
+    {
+        var msg = await Catalog.StartScanAsync();
+        if (msg != null)
+        {
+            _scanStatus = new ScanStatusDto { IsRunning = true, FilesFound = 0, Processed = 0 };
+            _ = PollScanStatusAsync();
+        }
+        await JS.InvokeVoidAsync("showToast", msg ?? "Ошибка запуска сканирования");
+    }
+
+    private async Task PollScanStatusAsync()
+    {
+        _scanCts?.Cancel();
+        _scanCts = new CancellationTokenSource();
+        var ct = _scanCts.Token;
+
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(2000, ct);
+
+                var status = await Catalog.GetScanStatusAsync();
+                if (status == null) break;
+
+                _scanStatus = status;
+                await InvokeAsync(StateHasChanged);
+
+                if (!status.IsRunning)
+                    break;
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        _scanCts?.Cancel();
+        _scanCts?.Dispose();
+        _embeddingCts?.Cancel();
+        _embeddingCts?.Dispose();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(Query))
+            await DoSearch();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Query != _prevQuery)
+        {
+            _prevQuery = Query;
+            if (!string.IsNullOrWhiteSpace(Query))
+                await DoSearch();
+        }
+    }
+
+    private async Task DoSearch()
+    {
+        if (string.IsNullOrWhiteSpace(Query)) return;
+        _page = 1;
+        _hasMore = true;
+        _movies = [];
+        _hasSearched = false;
+        _loading = true;
+        _fileCache = [];
+        _magnetInputs = [];
+        StateHasChanged();
+
+        try
+        {
+            _movies = await Catalog.SearchAsync(Query, _page);
+            _hasMore = _movies.Count > 0;
+            _hasSearched = true;
+            await PreloadFileStatus();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        catch { }
+
+        _loading = false;
+    }
+
+    private async Task LoadMore()
+    {
+        if (_loadingMore || string.IsNullOrWhiteSpace(Query)) return;
+        _loadingMore = true;
+        _page++;
+        StateHasChanged();
+
+        try
+        {
+            var newMovies = await Catalog.SearchAsync(Query, _page);
+            if (newMovies.Count == 0)
+                _hasMore = false;
+            else
+                _movies.AddRange(newMovies);
+            await PreloadFileStatus();
+        }
+        catch { _page--; }
+
+        _loadingMore = false;
+    }
+
+    private async Task PreloadFileStatus()
+    {
+        var tasks = _movies.Select(async m =>
+        {
+            var file = await Catalog.GetMovieFileAsync(m.Id);
+            _fileCache[m.Id] = file;
+            if (file is null && !_magnetInputs.ContainsKey(m.Id))
+                _magnetInputs[m.Id] = "";
+        });
+        await Task.WhenAll(tasks);
+        StateHasChanged();
+    }
+
+    private async Task Download(int movieId)
+    {
+        var magnet = _magnetInputs.GetValueOrDefault(movieId);
+        if (string.IsNullOrWhiteSpace(magnet) || _sendingIds.Contains(movieId)) return;
+
+        _sendingIds.Add(movieId);
+        StateHasChanged();
+
+        var ok = await Catalog.DownloadViaTorrentAsync(movieId, magnet);
+        if (ok)
+        {
+            _fileCache[movieId] = new MovieFileDto(null, false, "", 0);
+            _magnetInputs.Remove(movieId);
+            await JS.InvokeVoidAsync("showToast", "Торрент добавлен в загрузку");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("showToast", "Ошибка добавления торрента");
+        }
+
+        _sendingIds.Remove(movieId);
+    }
+}

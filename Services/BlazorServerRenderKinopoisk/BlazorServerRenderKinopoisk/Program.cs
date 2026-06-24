@@ -19,7 +19,16 @@ namespace BlazorServerRenderKinopoisk
                 .AddInteractiveServerComponents();
 
             var apiUrl = builder.Configuration.GetSection("ApiClient")["ApiUrl"] ?? "http://screeny.ddns.net";
-            builder.Services.AddSingleton<IFlurlClient>(new FlurlClient(apiUrl));
+
+            builder.Services.AddScoped<TokenRefreshHandler>(sp =>
+                new TokenRefreshHandler(sp, apiUrl));
+            builder.Services.AddScoped<IFlurlClient>(sp =>
+            {
+                var handler = sp.GetRequiredService<TokenRefreshHandler>();
+                handler.InnerHandler = new HttpClientHandler();
+                var httpClient = new HttpClient(handler) { BaseAddress = new Uri(apiUrl) };
+                return new FlurlClient(httpClient);
+            });
             builder.Services.AddScoped<TokenStore>();
             builder.Services.AddScoped<AuthService>();
             builder.Services.AddScoped<CatalogService>();

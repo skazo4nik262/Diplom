@@ -25,11 +25,27 @@
                   AdornmentColor="Color.Primary"
                   OnKeyDown="@HandleSearchKeyDown"
                   Class="search-field" />
+    <div class="smart-toggle">
+        <span class="smart-toggle-icon @(!_smartSearch ? "active" : "")">
+            <MudIcon Icon="@Icons.Material.Filled.Search" Size="@Size.Small" />
+        </span>
+        <label class="smart-switch">
+            <input type="checkbox" checked="@_smartSearch"
+                   @onchange="@((ChangeEventArgs e) => { _smartSearch = (bool)(e.Value ?? false); })" />
+            <span class="smart-slider"></span>
+        </label>
+        <span class="smart-toggle-icon @(_smartSearch ? "active" : "")">
+            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="@Size.Small" />
+        </span>
+    </div>
     <MudMenu Class="notif-menu" Style="margin-right: 4px;">
         <ActivatorContent>
-            <MudIconButton Icon="@Icons.Material.Filled.Notifications"
-                           Size="@Size.Large" Color="@Color.Primary"
-                           @onclick="@context.ToggleAsync" />
+            <MudBadge Color="Color.Error" Content="_unreadCount"
+                      Visible="_unreadCount > 0" Max="99">
+                <MudIconButton Icon="@Icons.Material.Filled.Notifications"
+                               Size="@Size.Large" Color="@Color.Primary"
+                               @onclick="@context.ToggleAsync" />
+            </MudBadge>
         </ActivatorContent>
         <ChildContent>
             <div style="padding: 8px 16px; display: flex; align-items: center; gap: 8px;">
@@ -57,7 +73,7 @@
                             {
                                 <MudText Typo="Typo.caption">@n.Movie.Title</MudText>
                             }
-                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 0.7rem;">
+                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 0.7rem;margin-left: 4px;">
                                 @n.CreatedAt.ToString("dd MMM HH:mm")
                             </MudText>
                         </div>
@@ -95,6 +111,13 @@
             <MudMenuItem OnClick="@ShowPlaylists">Плейлисты</MudMenuItem>
             <MudMenuItem OnClick="@ShowFriends">Друзья</MudMenuItem>
             <MudMenuItem OnClick="@ShowDiary">Дневник</MudMenuItem>
+            @if (TokenStore.IsAdmin)
+            {
+                <MudMenuItem OnClick="@GoToAdmin">
+                    <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="@Size.Small" Class="mr-1" />
+                    Админка
+                </MudMenuItem>
+            }
             <MudDivider />
             <MudMenuItem OnClick="@LogoutAsync">
                 <MudIcon Icon="@Icons.Material.Filled.Logout" Size="@Size.Small" Class="mr-1" />
@@ -106,6 +129,7 @@
 
 @code {
     private string? _searchQuery;
+    private bool _smartSearch;
     private ProfileResponse? _profile;
     private int _unreadCount;
     private List<NotificationItemDto> _notifications = [];
@@ -152,6 +176,7 @@
     private void ShowPlaylists() => Navigation.NavigateTo("/playlists");
     private void ShowFriends() => Navigation.NavigateTo("/friends");
     private void ShowDiary() => Navigation.NavigateTo("/diary");
+    private void GoToAdmin() => Navigation.NavigateTo("/admin/movies");
 
     private async Task MarkRead(Guid id)
     {
@@ -177,7 +202,10 @@
     {
         if (args.Key == "Enter" && !string.IsNullOrWhiteSpace(_searchQuery))
         {
-            Navigation.NavigateTo($"/search?query={Uri.EscapeDataString(_searchQuery)}");
+            var url = $"/search?query={Uri.EscapeDataString(_searchQuery)}";
+            if (_smartSearch)
+                url += "&multimodal=true";
+            Navigation.NavigateTo(url);
         }
     }
 }

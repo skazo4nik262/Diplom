@@ -43,7 +43,7 @@ public class UsersController : ControllerBase
             }),
             MovieCount = movies.Count,
             WatchedCount = movies.Count(m => m.Status == "watched"),
-            FavoriteCount = movies.Count(m => m.Status == "favorite"),
+            FavoriteCount = movies.Count(m => m.IsFavorite),
             PlannedCount = movies.Count(m => m.Status == "planned"),
             WatchingCount = movies.Count(m => m.Status == "watching"),
             DroppedCount = movies.Count(m => m.Status == "dropped")
@@ -72,6 +72,13 @@ public class UsersController : ControllerBase
             AverageRating = watched.Where(m => m.Rating.HasValue).Select(m => m.Rating.Value).DefaultIfEmpty().Average(),
             TopGenres = genreCounts
         });
+    }
+
+    [HttpGet("{userId:guid}/taste-dna")]
+    public async Task<IActionResult> GetUserTasteDna(Guid userId)
+    {
+        var dna = await _postgres.GetUserTasteDnaAsync(userId);
+        return Ok(dna);
     }
 
     [HttpGet("{userId:guid}/compare/{otherUserId:guid}")]
@@ -110,4 +117,24 @@ public class UsersController : ControllerBase
                 ? Math.Round((double)totalCommon / userMovies.Count * 100, 1) : 0
         });
     }
+
+    [HttpGet("notification-settings")]
+    public async Task<IActionResult> GetNotificationSettings()
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+        var (notifyNewInCollection, notifyVideoAdded, notifyFileAdded) = await _postgres.GetNotificationSettingsAsync(userId);
+        return Ok(new { notifyNewInCollection, notifyVideoAdded, notifyFileAdded });
+    }
+
+    [HttpPut("notification-settings")]
+    public async Task<IActionResult> SetNotificationSettings([FromBody] NotificationSettingsRequest request)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+        await _postgres.SetNotificationSettingsAsync(userId, request.NotifyNewInCollection, request.NotifyVideoAdded, request.NotifyFileAdded);
+        return Ok();
+    }
 }
+
+public record NotificationSettingsRequest(bool? NotifyNewInCollection, bool? NotifyVideoAdded, bool? NotifyFileAdded);

@@ -12,6 +12,9 @@ public class UserEntity
     public DateTime? Birthday { get; set; }
     public string? AvatarUrl { get; set; }
     public DateTime CreatedAt { get; set; }
+    public bool NotifyNewInCollection { get; set; } = true;
+    public bool NotifyVideoAdded { get; set; } = true;
+    public bool NotifyFileAdded { get; set; } = true;
 
     public ICollection<UserMovieEntity> UserMovies { get; set; } = new List<UserMovieEntity>();
     public ICollection<UserPlaylistEntity> Playlists { get; set; } = new List<UserPlaylistEntity>();

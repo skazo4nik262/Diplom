@@ -16,5 +16,6 @@ namespace CatalogService.Services
         Task<SearchContainer<SearchMovie>> GetMovieNowPlayingListAsync(int page, string lang);
         Task<SearchContainer<SearchMovie>> GetMovieRecommendationsAsync(int tmdbId, int page, string lang);
         Task<SearchContainer<SearchMovie>> GetMovieSimilarAsync(int tmdbId, int page, string lang);
+        Task<Keyword?> GetKeywordAsync(int keywordId);
     }
 }

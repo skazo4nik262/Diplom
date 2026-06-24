@@ -20,4 +20,11 @@ public class GenresController : ControllerBase
         var genres = await _postgres.GetGenresAsync();
         return Ok(genres);
     }
+
+    [HttpGet("popular")]
+    public async Task<IActionResult> GetPopularGenres([FromQuery] int count = 10)
+    {
+        var genres = await _postgres.GetPopularGenresAsync(count);
+        return Ok(genres);
+    }
 }

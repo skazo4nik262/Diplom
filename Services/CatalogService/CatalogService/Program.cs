@@ -25,20 +25,29 @@ namespace CatalogService
                     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
             builder.Services.AddDbContext<TmdbDbContext>(options =>
-                options.UseNpgsql(dataSource, o => o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+                options.UseNpgsql(dataSource, o =>
+                {
+                    o.UseVector();
+                    o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                }));
 
             builder.Services.AddScoped<ITmdbService, TmdbService>();
             builder.Services.AddScoped<IPostgresService, PostgresService>();
+            builder.Services.AddSingleton<EmbeddingGeneratorService>();
             builder.Services.AddHttpClient();
 
             var embeddingUrl = builder.Configuration.GetValue<string>("EmbeddingService:Url") ?? "http://localhost:5005";
             builder.Services.AddScoped<IEmbeddingClient>(_ => new HttpEmbeddingClient(embeddingUrl));
+
+            var cacheImageUrl = builder.Configuration.GetValue<string>("CacheImageService:Url") ?? "http://localhost:5007";
+            builder.Services.AddScoped<ICacheImageClient>(_ => new CacheImageClient(cacheImageUrl));
 
             builder.Logging.AddConsole();
             builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Model.Validation", LogLevel.Error);
             builder.Logging.AddFilter("Npgsql", LogLevel.Warning);
 
             var app = builder.Build();
+
 
             app.UseAuthorization();
 

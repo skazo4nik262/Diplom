@@ -14,12 +14,16 @@ namespace CatalogService.Services
     {
         private readonly TmdbDbContext _db;
         private readonly IEmbeddingClient _embedding;
+        private readonly ICacheImageClient _cacheImage;
+        private readonly ITmdbService _tmdb;
         private const int PageSize = 20;
 
-        public PostgresService(TmdbDbContext db, IEmbeddingClient embedding)
+        public PostgresService(TmdbDbContext db, IEmbeddingClient embedding, ICacheImageClient cacheImage, ITmdbService tmdb)
         {
             _db = db;
             _embedding = embedding;
+            _cacheImage = cacheImage;
+            _tmdb = tmdb;
         }
 
         public async Task<MovieEntity?> GetMovieAsync(int tmdbId)
@@ -117,6 +121,77 @@ namespace CatalogService.Services
                 .ToListAsync();
         }
 
+        public async Task<List<MovieEntity>> SearchByImageAsync(string query, int page, CancellationToken ct = default)
+        {
+            var pageSize = 40;
+
+            float[]? clipEmb = null;
+            float[]? textEmb = null;
+
+            var searchQuery = "search_query: " + query;
+
+            try
+            {
+                using var clipCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                clipCts.CancelAfter(TimeSpan.FromSeconds(10));
+                var clipTask = _embedding.GenerateClipTextEmbeddingAsync(query, clipCts.Token);
+                var textTask = _embedding.GenerateTextEmbeddingAsync(searchQuery, ct);
+                await Task.WhenAll(clipTask, textTask);
+                clipEmb = clipTask.Result;
+                textEmb = textTask.Result;
+            }
+            catch
+            {
+                // CLIP may be unavailable; attempt text-only fallback
+            }
+
+            if (textEmb is null)
+            {
+                try
+                {
+                    textEmb = await _embedding.GenerateTextEmbeddingAsync(searchQuery, ct);
+                }
+                catch
+                {
+                    return [];
+                }
+            }
+
+            List<MovieEntity> imageMovies = [];
+            if (clipEmb is not null)
+            {
+                try
+                {
+                    imageMovies = await FindNearestMoviesByImageAsync(clipEmb, null, 1, pageSize);
+                }
+                catch { }
+            }
+
+            List<MovieEntity> textMovies;
+            try
+            {
+                textMovies = await FindNearestMoviesAsync(textEmb, null, 1, pageSize);
+            }
+            catch
+            {
+                return [];
+            }
+
+            var seen = new HashSet<int>();
+            var merged = new List<MovieEntity>();
+
+            for (var i = 0; i < Math.Max(imageMovies.Count, textMovies.Count); i++)
+            {
+                if (i < imageMovies.Count && seen.Add(imageMovies[i].Id))
+                    merged.Add(imageMovies[i]);
+                if (i < textMovies.Count && seen.Add(textMovies[i].Id))
+                    merged.Add(textMovies[i]);
+            }
+
+            var offset = (page - 1) * 20;
+            return merged.Skip(offset).Take(20).ToList();
+        }
+
         public async Task<List<MovieEntity>> GetPopularMoviesAsync(int page)
         {
             return await _db.Movies
@@ -198,7 +273,23 @@ namespace CatalogService.Services
             foreach (var keyword in movie.Keywords?.Keywords ?? new List<Keyword>())
             {
                 var k = await _db.Keywords.FindAsync(keyword.Id);
-                entity.Keywords.Add(k ?? keyword.ToEntity());
+                if (k is null)
+                {
+                    k = keyword.ToEntity();
+                    _db.Keywords.Add(k);
+                    try
+                    {
+                        var ru = await _tmdb.GetKeywordAsync(keyword.Id);
+                        if (ru?.Name is not null && ru.Name != keyword.Name)
+                            k.NameRu = ru.Name;
+                    }
+                    catch { }
+                    entity.Keywords.Add(k);
+                }
+                else
+                {
+                    entity.Keywords.Add(k);
+                }
             }
 
             if (movie.Credits?.Cast is not null || movie.Credits?.Crew is not null)
@@ -216,6 +307,119 @@ namespace CatalogService.Services
             entity.Images = movie.ToImageEntities();
 
             _db.Movies.Add(entity);
+            await _db.SaveChangesAsync();
+
+            _ = CacheMovieImagesAsync(entity);
+            await CheckNewCollectionMovieForMovieAsync(movie.Id);
+        }
+
+        public async Task AttachKeywordsAsync(int tmdbId, List<Keyword> keywords)
+        {
+            var movie = await _db.Movies
+                .Include(m => m.Keywords)
+                .FirstOrDefaultAsync(m => m.Id == tmdbId);
+            if (movie is null) return;
+
+            foreach (var keyword in keywords)
+            {
+                if (movie.Keywords.Any(k => k.Id == keyword.Id)) continue;
+                var k = await _db.Keywords.FindAsync(keyword.Id);
+                if (k is null)
+                {
+                    k = keyword.ToEntity();
+                    _db.Keywords.Add(k);
+                    try
+                    {
+                        var ru = await _tmdb.GetKeywordAsync(keyword.Id);
+                        if (ru?.Name is not null && ru.Name != keyword.Name)
+                            k.NameRu = ru.Name;
+                    }
+                    catch { }
+                }
+                movie.Keywords.Add(k);
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        private async Task CacheMovieImagesAsync(MovieEntity movie)
+        {
+            try
+            {
+                if (movie.PosterPath is not null)
+                    await _cacheImage.GetImageAsync(movie.PosterPath.TrimStart('/'), "w500");
+            }
+            catch { }
+
+            var personIds = new HashSet<int>();
+            if (movie.Cast is not null)
+                foreach (var c in movie.Cast.Where(c => c.Person?.ProfilePath is not null))
+                    personIds.Add(c.PersonId);
+            if (movie.Crew is not null)
+                foreach (var c in movie.Crew.Where(c => c.Person?.ProfilePath is not null))
+                    personIds.Add(c.PersonId);
+
+            foreach (var pid in personIds)
+            {
+                try
+                {
+                    var person = await _db.People.FindAsync(pid);
+                    if (person?.ProfilePath is not null)
+                        await _cacheImage.GetImageAsync(person.ProfilePath.TrimStart('/'), "w500");
+                }
+                catch { }
+            }
+        }
+
+        public async Task CheckNewCollectionMovieForMovieAsync(int tmdbId)
+        {
+            var movie = await _db.Movies
+                .Where(m => m.Id == tmdbId && m.BelongsToCollectionId != null)
+                .Select(m => new { m.Id, m.BelongsToCollectionId, m.Title, m.ReleaseDate })
+                .FirstOrDefaultAsync();
+
+            if (movie?.BelongsToCollectionId == null) return;
+
+            var collectionId = movie.BelongsToCollectionId.Value;
+
+            var usersWithMoviesInCollection = await _db.UserMovies
+                .Where(um => um.Status == "watched"
+                    && um.MovieId != tmdbId
+                    && _db.Movies.Any(m => m.Id == um.MovieId && m.BelongsToCollectionId == collectionId))
+                .Select(um => um.UserId)
+                .Distinct()
+                .Join(_db.Users.Where(u => u.NotifyNewInCollection),
+                    uid => uid, u => u.Id, (uid, _) => uid)
+                .ToListAsync();
+
+            if (usersWithMoviesInCollection.Count == 0) return;
+
+            var existingNotifs = await _db.Notifications
+                .Where(n => usersWithMoviesInCollection.Contains(n.UserId)
+                    && n.EventType == "new_in_collection"
+                    && n.MovieId == tmdbId)
+                .Select(n => n.UserId)
+                .ToListAsync();
+
+            foreach (var userId in usersWithMoviesInCollection)
+            {
+                if (existingNotifs.Contains(userId)) continue;
+
+                var alreadyWatched = await _db.UserMovies.AnyAsync(um =>
+                    um.UserId == userId && um.MovieId == tmdbId);
+                if (alreadyWatched) continue;
+
+                _db.Notifications.Add(new NotificationEntity
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    ActorId = null,
+                    EventType = "new_in_collection",
+                    MovieId = tmdbId,
+                    IsRead = false,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
             await _db.SaveChangesAsync();
         }
 
@@ -243,6 +447,18 @@ namespace CatalogService.Services
 
             _db.People.Add(entity);
             await _db.SaveChangesAsync();
+
+            _ = CachePersonImageAsync(entity);
+        }
+
+        private async Task CachePersonImageAsync(PersonEntity person)
+        {
+            try
+            {
+                if (person.ProfilePath is not null)
+                    await _cacheImage.GetImageAsync(person.ProfilePath.TrimStart('/'), "w500");
+            }
+            catch { }
         }
 
         public async Task AddReviewAsync(Guid userId, int tmdbId, ReviewEntity review)
@@ -306,26 +522,133 @@ namespace CatalogService.Services
         }
         public async Task EnsureEmbeddingsAsync(int tmdbId)
         {
-            if (await _db.MovieEmbeddings.AnyAsync(e => e.MovieId == tmdbId))
-                return;
+            var existing = await _db.MovieEmbeddings.FirstOrDefaultAsync(e => e.MovieId == tmdbId);
 
             var movie = await _db.Movies
+                .Include(m => m.Collection)
                 .Include(m => m.Genres)
+                .Include(m => m.Keywords)
+                .Include(m => m.Cast.OrderBy(c => c.Order).Take(5))
+                    .ThenInclude(c => c.Person)
+                .Include(m => m.Crew.Where(c => c.Job == "Director"))
+                    .ThenInclude(c => c.Person)
                 .FirstOrDefaultAsync(m => m.Id == tmdbId);
 
             if (movie is null) return;
 
-            var text = $"{movie.Title} {movie.Overview} {string.Join(" ", movie.Genres.Select(g => g.Name))}";
-            var embedding = await _embedding.GenerateTextEmbeddingAsync(text);
+            var hasText = existing?.Embedding is { Length: > 0 };
+            var hasImage = existing?.ImageEmbedding is { Length: > 0 };
 
-            _db.MovieEmbeddings.Add(new MovieEmbeddingEntity
+            var textTask = hasText
+                ? Task.FromResult(existing!.Embedding)
+                : _embedding.GenerateTextEmbeddingAsync(BuildEmbeddingPrompt(movie));
+
+            Task<float[]?>? imageTask = null;
+            if (!hasImage && movie.PosterPath is not null)
             {
-                MovieId = tmdbId,
-                Embedding = embedding,
-                UpdatedAt = DateTime.UtcNow
-            });
+                var posterPath = movie.PosterPath.TrimStart('/');
+                imageTask = DownloadAndEmbedImageAsync(posterPath);
+            }
+
+            var textEmbedding = await textTask;
+            float[]? imageEmbedding = imageTask is not null ? await imageTask : existing?.ImageEmbedding;
+
+            if (existing is not null)
+            {
+                existing.Embedding = textEmbedding;
+                existing.ImageEmbedding = imageEmbedding ?? existing.ImageEmbedding;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                _db.MovieEmbeddings.Add(new MovieEmbeddingEntity
+                {
+                    MovieId = tmdbId,
+                    Embedding = textEmbedding,
+                    ImageEmbedding = imageEmbedding,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
             await _db.SaveChangesAsync();
         }
+
+        private static string BuildEmbeddingPrompt(MovieEntity movie)
+        {
+            var parts = new List<string>();
+
+            parts.Add($"Название: {movie.Title}");
+            if (movie.ReleaseDate.HasValue)
+                parts.Add($"Год: {movie.ReleaseDate.Value.Year}");
+
+            if (movie.Genres?.Count > 0)
+                parts.Add($"Жанры: {string.Join(", ", movie.Genres.Select(g => g.Name))}");
+
+            var creators = new List<string>();
+            var directors = movie.Crew?.Where(c => c.Job == "Director")
+                .Select(c => c.Person?.Name?.Replace(" ", "_"))
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToList();
+            if (directors?.Count > 0)
+                creators.AddRange(directors!);
+
+            var topActors = movie.Cast?.OrderBy(c => c.Order).Take(5)
+                .Select(c => c.Person?.Name?.Replace(" ", "_"))
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToList();
+            if (topActors?.Count > 0)
+                creators.AddRange(topActors!);
+
+            if (creators.Count > 0)
+                parts.Add($"Создатели: {string.Join(", ", creators)}");
+
+            var plot = movie.Overview ?? movie.Tagline;
+            if (!string.IsNullOrWhiteSpace(plot))
+            {
+                var snippet = plot.Length > 300 ? plot[..300] : plot;
+                parts.Add($"Сюжет: {snippet}");
+            }
+
+            var atmos = new List<string>();
+            if (!string.IsNullOrWhiteSpace(movie.Tagline))
+                atmos.Add(movie.Tagline);
+            if (movie.Keywords?.Count > 0)
+                atmos.AddRange(movie.Keywords.Select(k => k.Name!));
+            if (atmos.Count > 0)
+                parts.Add($"Ключевые слова: {string.Join(", ", atmos)}");
+
+            return "search_document: " + string.Join(". ", parts) + ".";
+        }
+
+        private async Task<float[]?> DownloadAndEmbedImageAsync(string posterPath)
+        {
+            byte[] imageBytes;
+            try
+            {
+                imageBytes = await _cacheImage.GetImageAsync(posterPath, "w500");
+            }
+            catch
+            {
+                try
+                {
+                    using var http = new HttpClient();
+                    imageBytes = await http.GetByteArrayAsync($"https://image.tmdb.org/t/p/w500/{posterPath}");
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            try
+            {
+                return await _embedding.GenerateImageEmbeddingAsync(imageBytes);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         public async Task<List<ProductionCompanyEntity>> GetCompaniesAsync()
         {
             return await _db.ProductionCompanies
@@ -347,6 +670,15 @@ namespace CatalogService.Services
                 .OrderBy(g => g.Name)
                 .ToListAsync();
         }
+
+        public async Task<List<GenreEntity>> GetPopularGenresAsync(int count = 10)
+        {
+            return await _db.Genres
+                .OrderByDescending(g => g.Movies.Count)
+                .Take(count)
+                .ToListAsync();
+        }
+
         public async Task<List<MovieCastEntity>> GetMovieCastAsync(int tmdbId)
         {
             return await _db.MovieCast
@@ -428,41 +760,168 @@ namespace CatalogService.Services
             return await _db.UserPlaylists
                 .Include(p => p.Items)
                 .ThenInclude(i => i.Movie)
+                .ThenInclude(m => m.Genres)
                 .FirstOrDefaultAsync(p => p.Id == playlistId);
         }
 
-        public async Task<List<MovieEntity>> GetRecommendationsAsync(Guid userId, int page)
+        public async Task<List<MovieEntity>> GetPlaylistSuggestionsAsync(int playlistId, int count = 5)
         {
-            var avgEmbedding = await ComputeUserAverageEmbeddingAsync(userId);
+            var playlist = await _db.UserPlaylists
+                .Include(p => p.Items)
+                .ThenInclude(i => i.Movie)
+                .Where(p => p.Id == playlistId)
+                .FirstOrDefaultAsync();
+
+            if (playlist is null || playlist.Items.Count == 0)
+                return [];
+
+            var movieIds = playlist.Items.Select(i => i.MovieId).ToList();
+            var excludeIds = movieIds.ToList();
+
+            var embeddings = await _db.MovieEmbeddings
+                .Where(e => movieIds.Contains(e.MovieId) && e.Embedding != null)
+                .Select(e => new { e.MovieId, e.Embedding })
+                .ToListAsync();
+
+            if (embeddings.Count == 0)
+                return [];
+
+            var dim = embeddings[0].Embedding!.Length;
+            var avg = new float[dim];
+
+            foreach (var e in embeddings)
+                for (var i = 0; i < dim; i++)
+                    avg[i] += e.Embedding![i];
+
+            float[]? nameEmb = null;
+            if (!string.IsNullOrWhiteSpace(playlist.Name))
+            {
+                try
+                {
+                    nameEmb = await _embedding.GenerateTextEmbeddingAsync(playlist.Name);
+                }
+                catch { }
+            }
+
+            if (nameEmb is not null && nameEmb.Length == dim)
+            {
+                for (var i = 0; i < dim; i++)
+                    avg[i] = avg[i] / embeddings.Count * 0.6f + nameEmb[i] * 0.4f;
+            }
+            else
+            {
+                for (var i = 0; i < dim; i++)
+                    avg[i] /= embeddings.Count;
+            }
+
+            return await FindNearestMoviesAsync(avg, excludeIds, 1, count);
+        }
+
+        public async Task<List<MovieEntity>> GetRecommendationsAsync(Guid userId, int page, bool useImage = false)
+        {
+            var avgEmbedding = await ComputeUserAverageEmbeddingAsync(userId, useImage);
             if (avgEmbedding is null) return [];
 
-            var seenIds = await _db.UserMovies
-                .Where(u => u.UserId == userId)
+            var excludeIds = await _db.UserMovies
+                .Where(u => u.UserId == userId
+                    && (u.Status == "watched" || u.Status == "watching" || u.Status == "planned"))
                 .Select(u => u.MovieId)
                 .ToListAsync();
 
-            return await FindNearestMoviesAsync(avgEmbedding, seenIds, page);
+            return useImage
+                ? await FindNearestMoviesByImageAsync(avgEmbedding, excludeIds, page)
+                : await FindNearestMoviesAsync(avgEmbedding, excludeIds, page);
         }
 
-        public async Task<List<MovieEntity>> GetSimilarMoviesAsync(int tmdbId, int page)
+        private static float CalculateWeight(bool isFavorite, string? status, int? rating)
         {
-            var embedding = await _db.MovieEmbeddings
-                .Where(e => e.MovieId == tmdbId)
-                .Select(e => e.Embedding)
-                .FirstOrDefaultAsync();
+            var w = 0f;
 
-            if (embedding is null)
+            if (isFavorite)
+                w += 2f;
+
+            if (rating >= 9)
+                w += 1.5f;
+            else if (rating >= 7)
+                w += 1f;
+            else if (rating >= 5)
+                w += 0.5f;
+            else if (rating >= 1)
+                w += -1.5f;
+
+            if (status == "watching")
+                w += 0.7f;
+            else if (status == "watched")
+                w += 0.7f;
+            else if (status == "planned")
+                w += 0.5f;
+            else if (status == "dropped")
+                w += -1.5f;
+
+            return w;
+        }
+
+        public async Task<List<MovieEntity>> GetSimilarMoviesAsync(int tmdbId, int page, bool useImage = false)
+        {
+            var emb = await _db.MovieEmbeddings.FirstOrDefaultAsync(e => e.MovieId == tmdbId);
+
+            if (emb is null)
             {
                 await EnsureEmbeddingsAsync(tmdbId);
-                embedding = await _db.MovieEmbeddings
-                    .Where(e => e.MovieId == tmdbId)
-                    .Select(e => e.Embedding)
-                    .FirstOrDefaultAsync();
-                if (embedding is null) return [];
+                emb = await _db.MovieEmbeddings.FirstOrDefaultAsync(e => e.MovieId == tmdbId);
+                if (emb is null) return [];
             }
 
-            return await FindNearestMoviesAsync(embedding, [tmdbId], page);
+            if (useImage)
+            {
+                if (emb.ImageEmbedding is not { Length: > 0 }) return [];
+                return await FindNearestMoviesByImageAsync(emb.ImageEmbedding, [tmdbId], page);
+            }
+
+            return await FindNearestMoviesAsync(emb.Embedding, [tmdbId], page);
         }
+
+        private static readonly Dictionary<string, (string Label, List<int> GenreIds, string Prompt)> Moods = new()
+        {
+            ["sad"] = ("Грустное", [18], "грустный эмоциональный драматический фильм, который заставляет плакать"),
+            ["happy"] = ("Веселое", [35], "веселый смешной комедийный фильм, поднимающий настроение"),
+            ["romantic"] = ("Романтичное", [10749], "романтичный фильм о любви и отношениях"),
+            ["scary"] = ("Страшное", [27, 53], "страшный пугающий фильм ужасов, триллер, держит в напряжении"),
+            ["inspiring"] = ("Мотивирующее", [36, 12], "мотивирующий вдохновляющий фильм о силе духа и достижениях"),
+            ["mysterious"] = ("Загадочное", [9648, 53], "загадочный мистический фильм, детектив с неожиданной развязкой"),
+            ["epic"] = ("Эпическое", [12, 28, 14], "эпический масштабный фильм, блокбастер с грандиозными сценами"),
+            ["touching"] = ("Трогательное", [18, 10751], "трогательный душевный фильм, который согревает сердце"),
+            ["atmospheric"] = ("Атмосферное", [14, 18], "атмосферный красивый фильм с уникальным визуальным стилем"),
+            ["crazy"] = ("Безумное", [35, 80], "безумный абсурдный фильм, комедия с сумасшедшим сюжетом")
+        };
+
+        public async Task<List<MovieEntity>> GetMoodMoviesAsync(string mood, int page)
+        {
+            if (!Moods.TryGetValue(mood, out var moodDef))
+                return [];
+
+            try
+            {
+                var prompt = "search_query: " + moodDef.Prompt;
+                var emb = await _embedding.GenerateTextEmbeddingAsync(prompt);
+                if (emb is { Length: > 0 })
+                    return await FindNearestMoviesAsync(emb, null, page);
+            }
+            catch
+            {
+            }
+
+            return await _db.Movies
+                .Include(m => m.Collection)
+                .Include(m => m.Genres)
+                .Where(m => m.Genres.Any(g => moodDef.GenreIds.Contains(g.Id)))
+                .OrderByDescending(m => m.VoteAverage)
+                .ThenByDescending(m => m.VoteCount)
+                .Skip((page - 1) * PageSize)
+                .Take(PageSize)
+                .ToListAsync();
+        }
+
         public async Task<List<MovieEntity>> GetTopRatedMoviesAsync(int page)
         {
             const int minVotes = 50;
@@ -490,16 +949,16 @@ namespace CatalogService.Services
                 .ToListAsync();
         }
 
-        public async Task<Dictionary<int, (int? Rating, string? Status)>> GetUserMoviesStatusBatchAsync(Guid userId, List<int> movieIds)
+        public async Task<Dictionary<int, (int? Rating, string? Status, bool IsFavorite, double? LastPosition, double? Duration)>> GetUserMoviesStatusBatchAsync(Guid userId, List<int> movieIds)
         {
             if (movieIds.Count == 0) return [];
 
             var entries = await _db.UserMovies
                 .Where(u => u.UserId == userId && movieIds.Contains(u.MovieId))
-                .Select(u => new { u.MovieId, u.Rating, u.Status })
+                .Select(u => new { u.MovieId, u.Rating, u.Status, u.IsFavorite, u.LastPositionSeconds, u.DurationSeconds })
                 .ToListAsync();
 
-            return entries.ToDictionary(e => e.MovieId, e => (e.Rating, e.Status));
+            return entries.ToDictionary(e => e.MovieId, e => (e.Rating, e.Status, e.IsFavorite, e.LastPositionSeconds, e.DurationSeconds));
         }
         public async Task<List<MovieEntity>> GetUserTasteAsync(Guid userId, int page)
         {
@@ -516,7 +975,12 @@ namespace CatalogService.Services
                 .Where(u => u.UserId == userId);
 
             if (!string.IsNullOrEmpty(status))
-                query = query.Where(u => u.Status == status);
+            {
+                if (status == "favorite")
+                    query = query.Where(u => u.IsFavorite);
+                else
+                    query = query.Where(u => u.Status == status);
+            }
 
             return await query
                 .OrderByDescending(u => u.CreatedAt)
@@ -549,13 +1013,96 @@ namespace CatalogService.Services
             await _db.SaveChangesAsync();
         }
 
-        public async Task<(int? Rating, string? Status)> GetUserMovieStatusAsync(Guid userId, int tmdbId)
+        public async Task<(int? Rating, string? Status, bool IsFavorite)> GetUserMovieStatusAsync(Guid userId, int tmdbId)
         {
             var entity = await _db.UserMovies
                 .Where(u => u.UserId == userId && u.MovieId == tmdbId)
-                .Select(u => new { u.Rating, u.Status })
+                .Select(u => new { u.Rating, u.Status, u.IsFavorite })
                 .FirstOrDefaultAsync();
-            return (entity?.Rating, entity?.Status);
+            if (entity is null)
+                return (null, null, false);
+            return (entity.Rating, entity.Status, entity.IsFavorite);
+        }
+
+        public async Task<(int? Rating, string? Status, bool IsFavorite, double? LastPosition, double? Duration)> GetUserMovieExtendedStatusAsync(Guid userId, int tmdbId)
+        {
+            var entity = await _db.UserMovies
+                .Where(u => u.UserId == userId && u.MovieId == tmdbId)
+                .Select(u => new { u.Rating, u.Status, u.IsFavorite, u.LastPositionSeconds, u.DurationSeconds })
+                .FirstOrDefaultAsync();
+            if (entity is null)
+                return (null, null, false, null, null);
+            return (entity.Rating, entity.Status, entity.IsFavorite, entity.LastPositionSeconds, entity.DurationSeconds);
+        }
+
+        public async Task SetFavoriteAsync(Guid userId, int tmdbId)
+        {
+            var entry = await _db.UserMovies
+                .FirstOrDefaultAsync(u => u.UserId == userId && u.MovieId == tmdbId);
+
+            if (entry is not null)
+            {
+                entry.IsFavorite = true;
+            }
+            else
+            {
+                _db.UserMovies.Add(new UserMovieEntity
+                {
+                    UserId = userId,
+                    MovieId = tmdbId,
+                    IsFavorite = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task RemoveFavoriteAsync(Guid userId, int tmdbId)
+        {
+            var entry = await _db.UserMovies
+                .FirstOrDefaultAsync(u => u.UserId == userId && u.MovieId == tmdbId);
+            if (entry is not null)
+            {
+                entry.IsFavorite = false;
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        public async Task SetMovieProgressAsync(Guid userId, int tmdbId, double position, double duration)
+        {
+            var entry = await _db.UserMovies
+                .FirstOrDefaultAsync(u => u.UserId == userId && u.MovieId == tmdbId);
+
+            if (entry is not null)
+            {
+                entry.LastPositionSeconds = position;
+                entry.DurationSeconds = duration;
+            }
+            else
+            {
+                _db.UserMovies.Add(new UserMovieEntity
+                {
+                    UserId = userId,
+                    MovieId = tmdbId,
+                    Status = "watching",
+                    LastPositionSeconds = position,
+                    DurationSeconds = duration,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task<List<UserMovieEntity>> GetContinueWatchingAsync(Guid userId, int page = 1)
+        {
+            return await _db.UserMovies
+                .Include(u => u.Movie)
+                .ThenInclude(m => m.Genres)
+                .Where(u => u.UserId == userId && u.LastPositionSeconds != null && u.LastPositionSeconds > 0)
+                .OrderByDescending(u => u.LastPositionSeconds)
+                .Skip((page - 1) * PageSize)
+                .Take(PageSize)
+                .ToListAsync();
         }
 
         public async Task RemoveMovie(int tmdbId)
@@ -577,30 +1124,25 @@ namespace CatalogService.Services
                 await _db.SaveChangesAsync();
             }
         }
-        public async Task<EmbeddingGenerationResult> RebuildAllEmbeddingsAsync()
+        public async Task<List<int>> GetAllMovieIdsAsync()
         {
-            var movieIds = await _db.Movies
-                .Where(m => !_db.MovieEmbeddings.Any(e => e.MovieId == m.Id))
+            return await _db.Movies.Select(m => m.Id).ToListAsync();
+        }
+
+        public async Task<List<int>> GetMovieIdsWithoutEmbeddingsAsync()
+        {
+            return await _db.Movies
+                .Where(m => !_db.MovieEmbeddings.Any(e => e.MovieId == m.Id
+                    && e.Embedding != null && e.Embedding.Length > 0
+                    && e.ImageEmbedding != null && e.ImageEmbedding.Length > 0))
                 .Select(m => m.Id)
                 .ToListAsync();
+        }
 
-            var processed = 0;
-            var errors = 0;
-
-            foreach (var id in movieIds)
-            {
-                try
-                {
-                    await EnsureEmbeddingsAsync(id);
-                    processed++;
-                }
-                catch
-                {
-                    errors++;
-                }
-            }
-
-            return new EmbeddingGenerationResult(Total: movieIds.Count, Processed: processed, Errors: errors);
+        public async Task ClearAllEmbeddingsAsync()
+        {
+            _db.MovieEmbeddings.RemoveRange(_db.MovieEmbeddings);
+            await _db.SaveChangesAsync();
         }
         public async Task RemoveCollection(int collectionId)
         {
@@ -781,36 +1323,90 @@ namespace CatalogService.Services
         private static DateTime? NormalizeUtc(DateTime? dt) =>
             dt.HasValue ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc) : null;
 
-        private async Task<float[]?> ComputeUserAverageEmbeddingAsync(Guid userId)
+        private async Task<float[]?> ComputeUserAverageEmbeddingAsync(Guid userId, bool useImage = false)
         {
-            var embeddings = await _db.UserMovies
-                .Where(u => u.UserId == userId && u.Rating >= 4)
-                .Join(_db.MovieEmbeddings, u => u.MovieId, e => e.MovieId, (_, e) => e.Embedding)
+            var userMovies = await _db.UserMovies
+                .Where(u => u.UserId == userId)
+                .Select(u => new { u.MovieId, u.Status, u.Rating, u.IsFavorite })
                 .ToListAsync();
+
+            if (userMovies.Count == 0) return null;
+
+            var movieIds = userMovies.Select(u => u.MovieId).ToList();
+
+            Dictionary<int, float[]> embeddings;
+            if (useImage)
+            {
+                embeddings = await _db.MovieEmbeddings
+                    .Where(e => movieIds.Contains(e.MovieId) && e.ImageEmbedding != null)
+                    .Select(e => new { e.MovieId, Embedding = e.ImageEmbedding! })
+                    .ToDictionaryAsync(e => e.MovieId, e => e.Embedding);
+            }
+            else
+            {
+                embeddings = await _db.MovieEmbeddings
+                    .Where(e => movieIds.Contains(e.MovieId))
+                    .Select(e => new { e.MovieId, Embedding = e.Embedding })
+                    .ToDictionaryAsync(e => e.MovieId, e => e.Embedding);
+            }
 
             if (embeddings.Count == 0) return null;
 
-            var dim = embeddings[0].Length;
-            var avg = new float[dim];
-            foreach (var vec in embeddings)
+            var dim = embeddings.First().Value.Length;
+            var weightedSum = new float[dim];
+            var hasSignal = false;
+
+            foreach (var um in userMovies)
+            {
+                if (!embeddings.TryGetValue(um.MovieId, out var emb)) continue;
+
+                var weight = CalculateWeight(um.IsFavorite, um.Status, um.Rating);
+                if (weight == 0) continue;
+                hasSignal = true;
+
                 for (var i = 0; i < dim; i++)
-                    avg[i] += vec[i];
+                    weightedSum[i] += weight * emb[i];
+            }
 
-            for (var i = 0; i < dim; i++)
-                avg[i] /= embeddings.Count;
-
-            return avg;
+            if (!hasSignal) return null;
+            return weightedSum;
         }
 
-        private async Task<List<MovieEntity>> FindNearestMoviesAsync(float[] target, List<int>? excludeIds, int page)
+        private async Task<List<MovieEntity>> FindNearestMoviesAsync(float[] target, List<int>? excludeIds, int page, int limit = 0)
         {
             var exclude = excludeIds ?? [];
             var vectorStr = "[" + string.Join(",", target.Select(f => f.ToString("G", CultureInfo.InvariantCulture))) + "]";
             var offset = (page - 1) * PageSize;
+            var fetch = limit > 0 ? limit : PageSize;
 
             var ids = await _db.Database.SqlQueryRaw<int>(
                 "SELECT e.\"MovieId\" FROM \"MovieEmbeddings\" e ORDER BY e.\"Embedding\"::vector <=> {0}::vector LIMIT {1} OFFSET {2}",
-                vectorStr, PageSize + exclude.Count, 0).ToListAsync();
+                vectorStr, fetch + exclude.Count, 0).ToListAsync();
+
+            var filtered = exclude.Count > 0 ? ids.Where(id => !exclude.Contains(id)).ToList() : ids;
+            var paged = filtered.Skip(offset).Take(PageSize).ToList();
+
+            if (paged.Count == 0) return [];
+
+            var movies = await _db.Movies
+                .Include(m => m.Collection)
+                .Include(m => m.Genres)
+                .Where(m => paged.Contains(m.Id))
+                .ToListAsync();
+
+            return paged.Select(id => movies.First(m => m.Id == id)).ToList();
+        }
+
+        private async Task<List<MovieEntity>> FindNearestMoviesByImageAsync(float[] target, List<int>? excludeIds, int page, int limit = 0)
+        {
+            var exclude = excludeIds ?? [];
+            var vectorStr = "[" + string.Join(",", target.Select(f => f.ToString("G", CultureInfo.InvariantCulture))) + "]";
+            var offset = (page - 1) * PageSize;
+            var fetch = limit > 0 ? limit : PageSize;
+
+            var ids = await _db.Database.SqlQueryRaw<int>(
+                "SELECT e.\"MovieId\" FROM \"MovieEmbeddings\" e WHERE e.\"ImageEmbedding\" IS NOT NULL ORDER BY e.\"ImageEmbedding\"::vector <=> {0}::vector LIMIT {1} OFFSET {2}",
+                vectorStr, fetch + exclude.Count, 0).ToListAsync();
 
             var filtered = exclude.Count > 0 ? ids.Where(id => !exclude.Contains(id)).ToList() : ids;
             var paged = filtered.Skip(offset).Take(PageSize).ToList();
@@ -890,6 +1486,89 @@ namespace CatalogService.Services
                 .ThenInclude(m => m.Genres)
                 .Where(u => u.UserId == userId)
                 .ToListAsync();
+        }
+
+        public async Task<TasteDnaResult> GetUserTasteDnaAsync(Guid userId)
+        {
+            var userMovies = await _db.UserMovies
+                .Include(u => u.Movie)
+                    .ThenInclude(m => m.Genres)
+                .Include(u => u.Movie)
+                    .ThenInclude(m => m.Keywords)
+                .Where(u => u.UserId == userId)
+                .ToListAsync();
+
+            var genreScores = new Dictionary<int, (string Name, double Score)>();
+            var keywordScores = new Dictionary<int, (string Name, double Score)>();
+
+            foreach (var um in userMovies)
+            {
+                var weight = CalculateWeight(um.IsFavorite, um.Status, um.Rating);
+                if (weight == 0) continue;
+
+                if (um.Movie?.Genres is not null)
+                {
+                    foreach (var g in um.Movie.Genres)
+                    {
+                        if (g.Name is null) continue;
+                        if (genreScores.TryGetValue(g.Id, out var existing))
+                            genreScores[g.Id] = (g.Name, existing.Score + weight);
+                        else
+                            genreScores[g.Id] = (g.Name, weight);
+                    }
+                }
+
+                if (um.Movie?.Keywords is not null)
+                {
+                    foreach (var kw in um.Movie.Keywords)
+                    {
+                        var name = kw.NameRu ?? kw.Name;
+                        if (name is null) continue;
+                        if (keywordScores.TryGetValue(kw.Id, out var existing))
+                            keywordScores[kw.Id] = (name, existing.Score + weight);
+                        else
+                            keywordScores[kw.Id] = (name, weight);
+                    }
+                }
+            }
+
+            // lazily fetch Russian names for top keywords missing NameRu
+            var dbKwMap = await _db.Keywords
+                .Where(k => keywordScores.Keys.Contains(k.Id))
+                .ToDictionaryAsync(k => k.Id);
+
+            var resultKeywords = new List<TasteDnaItem>();
+            foreach (var kv in keywordScores.OrderByDescending(kv => kv.Value.Score).Take(20))
+            {
+                var name = kv.Value.Name;
+                if (dbKwMap.TryGetValue(kv.Key, out var kwEntity) && kwEntity.NameRu is not null)
+                    name = kwEntity.NameRu;
+                else if (dbKwMap.TryGetValue(kv.Key, out kwEntity) && kwEntity.NameRu is null)
+                {
+                    try
+                    {
+                        var tmdb = await _tmdb.GetKeywordAsync(kv.Key);
+                        if (tmdb?.Name is not null)
+                        {
+                            kwEntity.NameRu = tmdb.Name;
+                            name = tmdb.Name;
+                        }
+                    }
+                    catch { }
+                }
+                resultKeywords.Add(new TasteDnaItem { Name = name, Score = Math.Round(kv.Value.Score, 1) });
+            }
+            await _db.SaveChangesAsync();
+
+            return new TasteDnaResult
+            {
+                Genres = genreScores.Values
+                    .OrderByDescending(g => g.Score)
+                    .Take(10)
+                    .Select(g => new TasteDnaItem { Name = g.Name, Score = Math.Round(g.Score, 1) })
+                    .ToList(),
+                Keywords = resultKeywords
+            };
         }
 
         public async Task AddReviewCommentAsync(string reviewId, Guid userId, string authorName, string content)
@@ -1025,12 +1704,11 @@ namespace CatalogService.Services
         public async Task<List<ActivityEventEntity>> GetFeedAsync(Guid userId, int page = 1, int pageSize = 20)
         {
             var followingIds = await GetFollowingIdsAsync(userId);
-            var userIds = followingIds.Append(userId).ToList();
 
             return await _db.ActivityEvents
                 .Include(e => e.User)
                 .Include(e => e.Movie)
-                .Where(e => userIds.Contains(e.UserId))
+                .Where(e => followingIds.Contains(e.UserId))
                 .OrderByDescending(e => e.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -1092,7 +1770,7 @@ namespace CatalogService.Services
                 .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
         }
 
-        public async Task CreateNotificationAsync(Guid userId, Guid actorId, string eventType, int? movieId = null, string? reviewId = null, int? playlistId = null)
+        public async Task CreateNotificationAsync(Guid userId, Guid? actorId, string eventType, int? movieId = null, string? reviewId = null, int? playlistId = null)
         {
             _db.Notifications.Add(new NotificationEntity
             {
@@ -1106,6 +1784,192 @@ namespace CatalogService.Services
                 IsRead = false,
                 CreatedAt = DateTime.UtcNow
             });
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task<(bool NotifyNewInCollection, bool NotifyVideoAdded, bool NotifyFileAdded)> GetNotificationSettingsAsync(Guid userId)
+        {
+            var user = await _db.Users
+                .Where(u => u.Id == userId)
+                .Select(u => new { u.NotifyNewInCollection, u.NotifyVideoAdded, u.NotifyFileAdded })
+                .FirstOrDefaultAsync();
+            return (user?.NotifyNewInCollection ?? true, user?.NotifyVideoAdded ?? true, user?.NotifyFileAdded ?? true);
+        }
+
+        public async Task SetNotificationSettingsAsync(Guid userId, bool? notifyNewInCollection, bool? notifyVideoAdded, bool? notifyFileAdded)
+        {
+            var user = await _db.Users.FindAsync(userId);
+            if (user is null) return;
+            if (notifyNewInCollection.HasValue)
+                user.NotifyNewInCollection = notifyNewInCollection.Value;
+            if (notifyVideoAdded.HasValue)
+                user.NotifyVideoAdded = notifyVideoAdded.Value;
+            if (notifyFileAdded.HasValue)
+                user.NotifyFileAdded = notifyFileAdded.Value;
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task CheckNewCollectionMoviesAsync()
+        {
+            var users = await _db.Users
+                .Where(u => u.NotifyNewInCollection)
+                .Select(u => u.Id)
+                .ToListAsync();
+
+            foreach (var userId in users)
+            {
+                var userMovieIds = await _db.UserMovies
+                    .Where(um => um.UserId == userId)
+                    .Select(um => um.MovieId)
+                    .ToListAsync();
+
+                var collectionIds = await _db.Movies
+                    .Where(m => userMovieIds.Contains(m.Id) && m.BelongsToCollectionId != null)
+                    .Select(m => m.BelongsToCollectionId!.Value)
+                    .Distinct()
+                    .ToListAsync();
+
+                if (collectionIds.Count == 0) continue;
+
+                var collectionMovies = await _db.Movies
+                    .Where(m => collectionIds.Contains(m.BelongsToCollectionId!.Value))
+                    .Select(m => new { m.Id, m.BelongsToCollectionId, m.Title, m.ReleaseDate })
+                    .ToListAsync();
+
+                var existingNotifs = await _db.Notifications
+                    .Where(n => n.UserId == userId && n.EventType == "new_in_collection" && n.MovieId != null)
+                    .Select(n => n.MovieId!.Value)
+                    .ToListAsync();
+
+                foreach (var cid in collectionIds)
+                {
+                    var userMoviesInCollection = await _db.UserMovies
+                        .Where(um => um.UserId == userId && collectionMovies.Any(cm => cm.Id == um.MovieId && cm.BelongsToCollectionId == cid))
+                        .Select(um => um.MovieId)
+                        .ToListAsync();
+
+                    var newMovies = collectionMovies
+                        .Where(cm => cm.BelongsToCollectionId == cid
+                            && !userMoviesInCollection.Contains(cm.Id)
+                            && !existingNotifs.Contains(cm.Id)
+                            && cm.ReleaseDate.HasValue)
+                        .ToList();
+
+                    foreach (var movie in newMovies)
+                    {
+                        _db.Notifications.Add(new NotificationEntity
+                        {
+                            Id = Guid.NewGuid(),
+                            UserId = userId,
+                            ActorId = null,
+                            EventType = "new_in_collection",
+                            MovieId = movie.Id,
+                            IsRead = false,
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task CheckNewVideosAsync()
+        {
+            var users = await _db.Users
+                .Where(u => u.NotifyVideoAdded)
+                .Select(u => u.Id)
+                .ToListAsync();
+
+            foreach (var userId in users)
+            {
+                var userMovieEntries = await _db.UserMovies
+                    .Where(um => um.UserId == userId && um.Status != null)
+                    .Select(um => new { um.MovieId, um.CreatedAt })
+                    .ToListAsync();
+
+                if (userMovieEntries.Count == 0) continue;
+
+                var movieIds = userMovieEntries.Select(e => e.MovieId).ToList();
+                var movieAddedAt = userMovieEntries.ToDictionary(e => e.MovieId, e => e.CreatedAt);
+
+                var existingNotifs = await _db.Notifications
+                    .Where(n => n.UserId == userId && n.EventType == "video_added" && n.MovieId != null)
+                    .Select(n => n.MovieId!.Value)
+                    .ToListAsync();
+
+                var moviesWithVideos = await _db.Movies
+                    .Where(m => movieIds.Contains(m.Id) && m.Videos.Any())
+                    .Select(m => new
+                    {
+                        m.Id,
+                        m.Title,
+                        LatestVideo = m.Videos.Max(v => (DateTime?)v.PublishedAt)
+                    })
+                    .ToListAsync();
+
+                foreach (var movie in moviesWithVideos)
+                {
+                    if (existingNotifs.Contains(movie.Id)) continue;
+                    if (!movie.LatestVideo.HasValue) continue;
+                    if (!movieAddedAt.TryGetValue(movie.Id, out var addedAt)) continue;
+                    if (movie.LatestVideo.Value <= addedAt) continue;
+
+                    _db.Notifications.Add(new NotificationEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        ActorId = null,
+                        EventType = "video_added",
+                        MovieId = movie.Id,
+                        IsRead = false,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task CheckNewFilesAsync()
+        {
+            var newlyReady = await _db.MovieFiles
+                .Where(f => f.IsReady)
+                .Select(f => f.TmdbId)
+                .ToListAsync();
+
+            var alreadyNotified = await _db.Notifications
+                .Where(n => n.EventType == "file_added" && n.MovieId != null)
+                .Select(n => n.MovieId!.Value)
+                .ToListAsync();
+
+            var toNotify = newlyReady.Except(alreadyNotified).ToList();
+            if (toNotify.Count == 0) return;
+
+            var users = await _db.Users
+                .Where(u => u.NotifyFileAdded)
+                .Select(u => u.Id)
+                .ToListAsync();
+
+            foreach (var userId in users)
+            {
+                var userMovieIds = await _db.UserMovies
+                    .Where(um => um.UserId == userId)
+                    .Select(um => um.MovieId)
+                    .ToListAsync();
+
+                foreach (var tmdbId in toNotify.Intersect(userMovieIds))
+                {
+                    _db.Notifications.Add(new NotificationEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        ActorId = null,
+                        EventType = "file_added",
+                        MovieId = tmdbId,
+                        IsRead = false,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
             await _db.SaveChangesAsync();
         }
         #endregion
@@ -1132,6 +1996,5 @@ namespace CatalogService.Services
         #endregion
     }
 
-    public record EmbeddingGenerationResult(int Total, int Processed, int Errors);
 }
 

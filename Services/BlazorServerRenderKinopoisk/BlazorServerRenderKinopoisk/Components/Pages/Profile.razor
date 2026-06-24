@@ -50,6 +50,54 @@
         </div>
     }
 
+    @if (_tasteDna is not null)
+    {
+        <div class="taste-dna-section">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">ДНК вкуса</MudText>
+            @if (_tasteDna.Genres.Count > 0)
+            {
+                <div class="taste-dna-group">
+                    <span class="taste-dna-label">Жанры</span>
+                    <div class="taste-dna-cloud">
+                        @foreach (var g in _tasteDna.Genres)
+                        {
+                            var size = 0.75 + (g.Score / _tasteDna.Genres.Max(x => x.Score)) * 0.55;
+                            <span class="taste-dna-tag" style="font-size: @($"{size:F2}rem")">@g.Name</span>
+                        }
+                    </div>
+                </div>
+            }
+            @if (_tasteDna.Keywords.Count > 0)
+            {
+                <div class="taste-dna-group">
+                    <span class="taste-dna-label">Ключевые слова</span>
+                    <div class="taste-dna-cloud">
+                        @foreach (var kw in _tasteDna.Keywords)
+                        {
+                            var size = 0.7 + (kw.Score / _tasteDna.Keywords.Max(x => x.Score)) * 0.45;
+                            <span class="taste-dna-tag" style="font-size: @($"{size:F2}rem")">@kw.Name</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <MudExpansionPanel Text="Настройки уведомлений" Class="mt-4">
+        <MudSwitch @bind-Checked="_notifyNewInCollection" T="bool" Color="Color.Primary"
+                   Label="Новые фильмы в коллекциях" Disabled="_savingNotif" />
+        <MudSwitch @bind-Checked="_notifyVideoAdded" T="bool" Color="Color.Primary"
+                   Label="Новые трейлеры (TMDB)" Disabled="_savingNotif"
+                   Class="mt-2" />
+        <MudSwitch @bind-Checked="_notifyFileAdded" T="bool" Color="Color.Primary"
+                   Label="Фильм готов к просмотру" Disabled="_savingNotif"
+                   Class="mt-2" />
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mt-2"
+                   OnClick="SaveNotificationSettings" Disabled="_savingNotif">
+            Сохранить
+        </MudButton>
+    </MudExpansionPanel>
+
     @if (_loading)
     {
         <div class="profile-movie-grid">
@@ -86,7 +134,7 @@
 
 @code {
     private List<UserMovieDto> _allMovies = [];
-    private List<UserMovieDto> _favoriteMovies => _allMovies.Where(m => m.Status == "favorite").ToList();
+    private List<UserMovieDto> _favoriteMovies => _allMovies.Where(m => m.IsFavorite).ToList();
     private List<UserMovieDto> _watchingMovies => _allMovies.Where(m => m.Status == "watching").ToList();
     private List<UserMovieDto> _plannedMovies => _allMovies.Where(m => m.Status == "planned").ToList();
     private List<UserMovieDto> _watchedMovies => _allMovies.Where(m => m.Status == "watched").ToList();
@@ -95,6 +143,11 @@
     private int _activeTab;
     private ProfileResponse? _profile;
     private UserStatsDto? _stats;
+    private TasteDnaDto? _tasteDna;
+    private bool _notifyNewInCollection = true;
+    private bool _notifyVideoAdded = true;
+    private bool _notifyFileAdded = true;
+    private bool _savingNotif;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -110,11 +163,26 @@
         _profile = await Auth.GetProfileAsync();
         var userId = _profile?.Id;
         if (userId.HasValue)
+        {
             _stats = await Catalog.GetUserStatsAsync(userId.Value);
+            _tasteDna = await Catalog.GetUserTasteDnaAsync(userId.Value);
+        }
+
+        var notifSettings = await Catalog.GetNotificationSettingsAsync();
+        _notifyNewInCollection = notifSettings.NotifyNewInCollection;
+        _notifyVideoAdded = notifSettings.NotifyVideoAdded;
+        _notifyFileAdded = notifSettings.NotifyFileAdded;
 
         await LoadMovies();
         _loading = false;
         StateHasChanged();
+    }
+
+    private async Task SaveNotificationSettings()
+    {
+        _savingNotif = true;
+        await Catalog.SetNotificationSettingsAsync(_notifyNewInCollection, _notifyVideoAdded, _notifyFileAdded);
+        _savingNotif = false;
     }
 
     private async Task LoadMovies()

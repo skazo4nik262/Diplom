@@ -56,6 +56,17 @@ namespace BlazorServerRenderKinopoisk.Services
             }
         }
 
+        public async Task<RefreshResponse?> RefreshTokenAsync(string refreshToken)
+        {
+            try
+            {
+                return await _flurl.Request("api/auth/refresh")
+                    .PostJsonAsync(new RefreshRequest(refreshToken))
+                    .ReceiveJson<RefreshResponse>();
+            }
+            catch { return null; }
+        }
+
         public async Task<ProfileResponse?> GetProfileAsync()
         {
             try
@@ -80,16 +91,65 @@ namespace BlazorServerRenderKinopoisk.Services
             catch { return null; }
         }
 
-        public async Task<List<UserBriefDto>> SearchUsersAsync(string query)
+        public async Task<List<UserBriefDto>> SearchUsersAsync(string query, bool includeInactive = false)
         {
             try
             {
-                return await _flurl.Request("api/auth/users/search")
+                var req = _flurl.Request("api/auth/users/search")
                     .WithOAuthBearerToken(_tokenStore.Token ?? "")
-                    .SetQueryParam("query", query)
-                    .GetJsonAsync<List<UserBriefDto>>();
+                    .SetQueryParam("query", query);
+                if (includeInactive)
+                    req = req.SetQueryParam("includeInactive", true);
+                return await req.GetJsonAsync<List<UserBriefDto>>();
             }
             catch { return []; }
+        }
+
+        public async Task<bool> DeactivateUserAsync(Guid userId)
+        {
+            try
+            {
+                await _flurl.Request($"api/auth/users/{userId}")
+                    .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                    .DeleteAsync();
+                return true;
+            }
+            catch { return false; }
+        }
+
+        public async Task<bool> ReactivateUserAsync(Guid userId)
+        {
+            try
+            {
+                await _flurl.Request($"api/auth/users/{userId}/reactivate")
+                    .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                    .PatchAsync();
+                return true;
+            }
+            catch { return false; }
+        }
+
+        public async Task<bool> SetUserRoleAsync(Guid userId, int role)
+        {
+            try
+            {
+                await _flurl.Request($"api/auth/users/{userId}/role")
+                    .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                    .PatchJsonAsync(new { role });
+                return true;
+            }
+            catch { return false; }
+        }
+
+        public async Task<ProfileResponse?> GetUserByIdAsync(Guid userId)
+        {
+            try
+            {
+                return await _flurl.Request($"api/auth/users/id/{userId}")
+                    .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                    .GetJsonAsync<ProfileResponse>();
+            }
+            catch { return null; }
         }
     }
     public record ErrorBody(string Error);

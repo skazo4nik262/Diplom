@@ -71,5 +71,11 @@ namespace CatalogService.Services
             return await _client.GetPersonAsync(personId, methods);
         }
         #endregion
+        #region keywords
+        public async Task<TMDbLib.Objects.General.Keyword?> GetKeywordAsync(int keywordId)
+        {
+            return await _client.GetKeywordAsync(keywordId);
+        }
+        #endregion
     }
 }

@@ -68,4 +68,16 @@ public class NotificationsController : ControllerBase
         await _postgres.MarkAllNotificationsReadAsync(userId);
         return Ok();
     }
+
+    [HttpPost("check-new-content")]
+    public async Task<IActionResult> CheckNewContent()
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty) return Unauthorized();
+
+        await _postgres.CheckNewCollectionMoviesAsync();
+        await _postgres.CheckNewVideosAsync();
+        await _postgres.CheckNewFilesAsync();
+        return Ok();
+    }
 }

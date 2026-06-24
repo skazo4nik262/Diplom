@@ -20,6 +20,7 @@
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script src="@Assets["_content/MudBlazor/MudBlazor.min.js"]"></script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
         window._tooltipPos = { x: 0, y: 0 };
 
@@ -82,9 +83,56 @@
             window.addEventListener('scroll', onScroll);
         };
 
+        window._playerPosition = 0;
+        window._playerDuration = 0;
+        window._initialPosition = null;
+
         window.initMoviePlayer = function() {
             var el = document.getElementById('movie-player');
-            if (el && !el.plyr) new Plyr(el);
+            if (!el || el.plyr) return;
+            var src = el.getAttribute('data-hls-src');
+            if (src && Hls.isSupported()) {
+                var hls = new Hls();
+                hls.loadSource(src);
+                hls.attachMedia(el);
+                el.addEventListener('loadedmetadata', function() {
+                    var player = new Plyr(el);
+                    player.on('timeupdate', function() {
+                        window._playerPosition = player.currentTime;
+                        window._playerDuration = player.duration;
+                    });
+                    if (window._initialPosition > 0) {
+                        player.on('ready', function() {
+                            player.currentTime = window._initialPosition;
+                            window._initialPosition = null;
+                        });
+                    }
+                });
+            } else {
+                var player = new Plyr(el);
+                player.on('timeupdate', function() {
+                    window._playerPosition = player.currentTime;
+                    window._playerDuration = player.duration;
+                });
+                if (window._initialPosition > 0) {
+                    player.on('ready', function() {
+                        player.currentTime = window._initialPosition;
+                        window._initialPosition = null;
+                    });
+                }
+            }
+        };
+
+        window.setInitialPosition = function(pos) {
+            window._initialPosition = pos;
+            var el = document.getElementById('movie-player');
+            if (el && el.plyr) {
+                el.plyr.currentTime = pos;
+            }
+        };
+
+        window.getPlayerState = function() {
+            return { Position: window._playerPosition, Duration: window._playerDuration };
         };
 
         window.showToast = function(message) {
@@ -106,6 +154,7 @@
                 window.showToast('Ссылка скопирована');
             });
         };
+
     </script>
 </body>
 

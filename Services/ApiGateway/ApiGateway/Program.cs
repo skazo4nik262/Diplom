@@ -3,14 +3,21 @@ namespace ApiGateway
     using Microsoft.AspNetCore.Authentication.JwtBearer;
     using Microsoft.IdentityModel.Tokens;
     using System.Text;
+    using System.Security.Claims;
+    using System.Collections.Concurrent;
 
     public class Program
     {
+        private static readonly ConcurrentDictionary<Guid, (int Version, DateTime CachedAt)> _tokenVersionCache = new();
+
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
-
+            builder.Services.AddHttpClient("IdentityService", client =>
+            {
+                client.BaseAddress = new Uri(builder.Configuration["IdentityService:Url"] ?? "http://identity-service:5001");
+            });
 
             builder.Services.AddControllers();
 
@@ -40,7 +47,55 @@ namespace ApiGateway
                             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
                         )
                     };
+
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnTokenValidated = async context =>
+                        {
+                            var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                            var tokenVersionClaim = context.Principal?.FindFirst("tokenVersion")?.Value;
+
+                            if (userIdClaim is null || tokenVersionClaim is null) return;
+
+                            if (!Guid.TryParse(userIdClaim, out var userId)) return;
+                            if (!int.TryParse(tokenVersionClaim, out var tokenVersion)) return;
+
+                            var cacheKey = userId;
+                            if (_tokenVersionCache.TryGetValue(cacheKey, out var cached))
+                            {
+                                if (DateTime.UtcNow - cached.CachedAt < TimeSpan.FromMinutes(5) && cached.Version == tokenVersion)
+                                    return;
+                            }
+
+                            try
+                            {
+                                var factory = context.HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
+                                var client = factory.CreateClient("IdentityService");
+                                var response = await client.GetAsync($"/api/auth/users/{userId}/token-version");
+
+                                if (!response.IsSuccessStatusCode)
+                                {
+                                    context.Fail("Token validation failed: user not found");
+                                    return;
+                                }
+
+                                var result = await response.Content.ReadFromJsonAsync<TokenVersionResponse>();
+                                if (result is null || result.TokenVersion != tokenVersion)
+                                {
+                                    context.Fail("Token validation failed: token version mismatch");
+                                    return;
+                                }
+
+                                _tokenVersionCache[cacheKey] = (tokenVersion, DateTime.UtcNow);
+                            }
+                            catch
+                            {
+                                context.Fail("Token validation failed: identity service unavailable");
+                            }
+                        }
+                    };
                 });
+
             builder.Services.AddAuthorization(options =>
             {
                 options.AddPolicy("Authenticated", policy => policy.RequireAuthenticatedUser());
@@ -70,6 +125,15 @@ namespace ApiGateway
         },
         new Yarp.ReverseProxy.Configuration.RouteConfig
         {
+            RouteId = "auth-refresh",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/auth/refresh"
+            },
+            ClusterId = "identity-cluster"
+        },
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
             RouteId = "catalog-poster",
             Match = new Yarp.ReverseProxy.Configuration.RouteMatch
             {
@@ -79,6 +143,26 @@ namespace ApiGateway
         },
 
 
+
+        // Открытый стриминг (ID фильма уже защищён аутентификацией при получении) \\
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
+            RouteId = "jellyfin-stream",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/jellyfin/Media/stream/{**catch-all}"
+            },
+            ClusterId = "jellyfin-cluster",
+        },
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
+            RouteId = "jellyfin-hls",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/jellyfin/Media/hls/{**catch-all}"
+            },
+            ClusterId = "jellyfin-cluster",
+        },
 
         // Защищённые маршруты \\
         new Yarp.ReverseProxy.Configuration.RouteConfig
@@ -113,6 +197,16 @@ namespace ApiGateway
         },
         new Yarp.ReverseProxy.Configuration.RouteConfig
         {
+            RouteId = "auth-users-reactivate",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/auth/users/{**catch-all}"
+            },
+            ClusterId = "identity-cluster",
+            AuthorizationPolicy = "Authenticated"
+        },
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
             RouteId = "jellyfin",
             Match = new Yarp.ReverseProxy.Configuration.RouteMatch
             {
@@ -139,6 +233,16 @@ namespace ApiGateway
                 Path = "/api/catalog/users/{**catch-all}"
             },
             ClusterId = "catalog-cluster",
+            AuthorizationPolicy = "Authenticated"
+        },
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
+            RouteId = "admin",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/admin/{**catch-all}"
+            },
+            ClusterId = "admin-cluster",
             AuthorizationPolicy = "Authenticated"
         }
     },
@@ -178,6 +282,17 @@ namespace ApiGateway
                     Address = "http://catalog-service:5003"
                 }
             }
+        },
+        new Yarp.ReverseProxy.Configuration.ClusterConfig
+        {
+            ClusterId = "admin-cluster",
+            Destinations = new Dictionary<string, Yarp.ReverseProxy.Configuration.DestinationConfig>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["destination1"] = new Yarp.ReverseProxy.Configuration.DestinationConfig
+                {
+                    Address = "http://admin-service:5009"
+                }
+            }
         }
     }
     #endregion
@@ -197,4 +312,6 @@ namespace ApiGateway
             app.Run("http://0.0.0.0:5000");
         }
     }
+
+    public record TokenVersionResponse(int TokenVersion);
 }

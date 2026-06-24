@@ -4,7 +4,7 @@ public class NotificationEntity
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
-    public Guid ActorId { get; set; }
+    public Guid? ActorId { get; set; }
     public string EventType { get; set; } = null!;
     public int? MovieId { get; set; }
     public string? ReviewId { get; set; }

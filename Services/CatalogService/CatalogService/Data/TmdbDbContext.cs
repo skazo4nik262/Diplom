@@ -35,6 +35,7 @@ public class TmdbDbContext : DbContext
     public DbSet<UserFollowEntity> UserFollows => Set<UserFollowEntity>();
     public DbSet<ActivityEventEntity> ActivityEvents => Set<ActivityEventEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
+    public DbSet<MovieFileEntity> MovieFiles => Set<MovieFileEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -235,7 +236,9 @@ public class TmdbDbContext : DbContext
         {
             entity.ToTable("Keywords");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedNever();
             entity.Property(e => e.Name).IsUnicode().HasMaxLength(200);
+            entity.Property(e => e.NameRu).IsUnicode().HasMaxLength(200);
             entity.HasIndex(e => e.Name);
         });
 
@@ -404,6 +407,7 @@ public class TmdbDbContext : DbContext
             entity.ToTable("UserMovies");
             entity.HasKey(e => new { e.UserId, e.MovieId });
             entity.Property(e => e.Status).HasMaxLength(200);
+            entity.Property(e => e.IsFavorite).HasDefaultValue(false);
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.MovieId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -429,6 +433,7 @@ public class TmdbDbContext : DbContext
             entity.ToTable("MovieEmbeddings");
             entity.HasKey(e => e.MovieId);
             entity.Property(e => e.Embedding);
+            entity.Property(e => e.ImageEmbedding);
             entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.MovieId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -468,6 +473,17 @@ public class TmdbDbContext : DbContext
             entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.MovieId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => new { e.UserId, e.IsRead });
+        });
+
+        modelBuilder.Entity<MovieFileEntity>(entity =>
+        {
+            entity.ToTable("MovieFiles");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FileName).HasMaxLength(500);
+            entity.Property(e => e.FilePath).HasMaxLength(1000);
+            entity.HasIndex(e => e.TmdbId);
+            entity.HasOne(e => e.Movie).WithMany().HasForeignKey(e => e.TmdbId)
+                  .HasPrincipalKey(m => m.Id).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

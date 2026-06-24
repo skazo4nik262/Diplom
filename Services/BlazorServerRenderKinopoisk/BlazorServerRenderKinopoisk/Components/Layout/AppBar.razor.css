@@ -22,6 +22,69 @@
     flex: 1;
 }
 
+.smart-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.smart-toggle-icon {
+    display: flex;
+    align-items: center;
+    font-size: 1.1rem;
+    opacity: 0.35;
+    transition: opacity 0.2s;
+    line-height: 1;
+}
+
+.smart-toggle-icon.active {
+    opacity: 0.85;
+    color: var(--mud-palette-primary);
+}
+
+.smart-switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.smart-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.smart-slider {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    transition: background 0.2s;
+}
+
+.smart-slider::before {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    left: 2px;
+    bottom: 2px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+
+.smart-switch input:checked + .smart-slider {
+    background: color-mix(in srgb, var(--mud-palette-primary) 60%, transparent);
+}
+
+.smart-switch input:checked + .smart-slider::before {
+    transform: translateX(16px);
+}
+
 .account-menu {
     margin-left: auto;
     flex-shrink: 0;

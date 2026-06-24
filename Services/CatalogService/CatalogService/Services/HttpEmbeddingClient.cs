@@ -21,11 +21,25 @@ public class HttpEmbeddingClient(string baseUrl) : IEmbeddingClient
         return response.Embedding;
     }
 
-    public async Task<float[]> GenerateImageEmbeddingAsync(string imageUrl, CancellationToken ct = default)
+    public async Task<float[]> GenerateImageEmbeddingAsync(byte[] imageBytes, CancellationToken ct = default)
     {
+        using var form = new MultipartFormDataContent
+        {
+            { new ByteArrayContent(imageBytes), "image", "poster.jpg" }
+        };
+
         var response = await NoProxyClient
             .Request($"{baseUrl}/embed/image")
-            .PostJsonAsync(new { url = imageUrl })
+            .PostAsync(form)
+            .ReceiveJson<EmbedResponse>();
+        return response.Embedding;
+    }
+
+    public async Task<float[]> GenerateClipTextEmbeddingAsync(string text, CancellationToken ct = default)
+    {
+        var response = await NoProxyClient
+            .Request($"{baseUrl}/embed/clip-text")
+            .PostJsonAsync(new { text })
             .ReceiveJson<EmbedResponse>();
         return response.Embedding;
     }

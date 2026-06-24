@@ -4,20 +4,38 @@
 @inject CatalogService Catalog
 @inject TokenStore TokenStore
 @inject NavigationManager Navigation
-@inject IDialogService DialogService
 @inject IJSRuntime JS
 
 <div class="page-fade-in">
 <Hero Movies="popularMovies" />
 
-    <div class="genre-bar mt-4 mb-4">
-        @foreach (var genre in CatalogService.Genres)
-        {
-            <button class="genre-pill" @onclick="() => GoToGenre(genre.Id)">
-                @genre.Name
-            </button>
-        }
-    </div>
+    @if (continueWatchingMovies.Count > 0)
+    {
+        <MudText Typo="Typo.h5" Class="mb-2 mt-4">Продолжить просмотр</MudText>
+        <div class="carousel-wrapper">
+            <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.continue-carousel'), -1)" type="button">‹</button>
+            <div class="continue-carousel carousel">
+                @foreach (var movie in continueWatchingMovies)
+                {
+                    <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)"
+                               OnHover="HoverMovie" OnUnhover="UnhoverMovie" OnMouseMove="TrackMouse" />
+                }
+            </div>
+            <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.continue-carousel'), 1)" type="button">›</button>
+        </div>
+    }
+
+    @if (_popularGenres.Count > 0)
+    {
+        <div class="genre-bar mt-4 mb-4">
+            @foreach (var genre in _popularGenres)
+            {
+                <button class="genre-pill" @onclick="() => GoToGenre(genre.Id)">
+                    @genre.Name
+                </button>
+            }
+        </div>
+    }
 
     @if (trendingMovies.Count > 0)
     {
@@ -127,12 +145,10 @@
     private List<MovieDto> topRatedMovies = [];
     private List<MovieDto> recommendedMovies = [];
     private List<MovieDto> trendingMovies = [];
+    private List<MovieDto> continueWatchingMovies = [];
+    private List<GenreDto> _popularGenres = [];
     private bool isLoading = true;
     private Dictionary<int, UserMovieStatusDto> _userStatuses = [];
-
-    private PeriodicTimer? _timer;
-    private CancellationTokenSource? _cts;
-    private DateTime _tokenExpiry = DateTime.MinValue;
 
     private MovieDto? _hoveredMovie;
     private CancellationTokenSource? _hoverCts;
@@ -178,17 +194,21 @@
             var topRatedTask = Catalog.GetTopRatedAsync();
             var recsTask = Catalog.GetRecommendationsAsync();
             var trendingTask = Catalog.GetTrendingAsync();
-            await Task.WhenAll(popularTask, topRatedTask, recsTask, trendingTask);
+            var continueTask = Catalog.GetContinueWatchingAsync();
+            await Task.WhenAll(popularTask, topRatedTask, recsTask, trendingTask, continueTask);
 
             popularMovies = popularTask.Result;
             topRatedMovies = topRatedTask.Result;
             recommendedMovies = recsTask.Result;
             trendingMovies = trendingTask.Result;
+            continueWatchingMovies = continueTask.Result.Select(u => u.Movie!).ToList();
 
             var allIds = popularMovies.Concat(topRatedMovies).Concat(recommendedMovies).Concat(trendingMovies)
+                .Concat(continueWatchingMovies)
                 .Select(m => m.Id).Distinct().ToList();
             _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(allIds);
             _activityFeed = await Catalog.GetFeedAsync();
+            _popularGenres = await Catalog.GetPopularGenresAsync(12);
         }
         catch (UnauthorizedAccessException)
         {
@@ -198,40 +218,6 @@
 
         isLoading = false;
         StateHasChanged();
-
-        StartSessionMonitor();
-    }
-
-    private void StartSessionMonitor()
-    {
-        var expiry = TokenStore.GetTokenExpiry();
-        if (expiry == null) return;
-
-        _tokenExpiry = expiry.Value;
-        _cts = new CancellationTokenSource();
-        _timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
-
-        _ = MonitorSessionAsync(_cts.Token);
-    }
-
-    private async Task MonitorSessionAsync(CancellationToken ct)
-    {
-        while (await _timer!.WaitForNextTickAsync(ct))
-        {
-            if (_tokenExpiry == DateTime.MinValue) break;
-
-            var remaining = _tokenExpiry - DateTime.UtcNow;
-            if (remaining <= TimeSpan.FromSeconds(60))
-            {
-                await InvokeAsync(async () =>
-                {
-                    var dialog = await DialogService.ShowAsync<SessionExpiringDialog>();
-                    await dialog.Result;
-                    Navigation.NavigateTo("/login");
-                });
-                break;
-            }
-        }
     }
 
     private void HoverMovie(MovieDto movie)
@@ -319,9 +305,6 @@
 
     public void Dispose()
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _timer?.Dispose();
         _hoverCts?.Cancel();
         _hoverCts?.Dispose();
     }

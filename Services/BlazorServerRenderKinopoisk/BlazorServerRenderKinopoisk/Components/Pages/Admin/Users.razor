@@ -1,0 +1,208 @@
+@page "/admin/users"
+@layout AdminLayout
+@rendermode InteractiveServer
+@inject AuthService Auth
+@inject TokenStore TokenStore
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="admin-page">
+    @if (!TokenStore.IsAdmin)
+    {
+        <MudText Typo="Typo.h5" Class="mt-8" Style="text-align: center; opacity: 0.5;">Доступ запрещён</MudText>
+        return;
+    }
+
+    <div class="admin-users-search">
+        <MudTextField @bind-Value="_searchQuery" T="string" Placeholder="Поиск пользователей..."
+                      Immediate="true" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined" AdornmentColor="Color.Primary" />
+    </div>
+
+    @if (_loading)
+    {
+        <div class="admin-users-list">
+            @for (var i = 0; i < 5; i++)
+            {
+                <div class="admin-user-row skeleton">
+                    <div style="display: flex; flex: 1; gap: 8px; flex-direction: column;">
+                        <div class="skeleton-text" style="width: 40%"></div>
+                        <div class="skeleton-text" style="width: 20%"></div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else if (_users.Count > 0)
+    {
+        <div class="admin-users-list">
+            @foreach (var user in _users)
+            {
+                var isSelf = user.Id == _currentUserId;
+                var isBusy = _actioningIds.Contains(user.Id);
+
+                <div class="admin-user-row">
+                    <div class="admin-user-info">
+                        <div class="admin-user-login@(isSelf ? " admin-self" : "")">
+                            @user.DisplayName
+                            @if (isSelf)
+                            {
+                                <span style="opacity: 0.4; font-size: 0.75rem;">(вы)</span>
+                            }
+                        </div>
+                        @if (user.Username is not null && user.Username != user.Login)
+                        {
+                            <div class="admin-user-username">@@@user.Login</div>
+                        }
+                    </div>
+                    <div class="admin-user-role@(user.IsAdmin ? " role-admin" : "")">
+                        @(user.IsAdmin ? "Админ" : "Пользователь")
+                    </div>
+                    @if (!isSelf)
+                    {
+                        <button class="admin-role-btn"
+                                @onclick="() => ToggleRole(user)"
+                                disabled="@isBusy">
+                            @(isBusy && _actionType == "role" ? "..." : (user.IsAdmin ? "Снять админа" : "Сделать админом"))
+                        </button>
+                        <button class="admin-block-btn"
+                                @onclick="() => ToggleBlock(user)"
+                                disabled="@isBusy">
+                            @(isBusy && _actionType == "block" ? "..." : (user.IsBlocked ? "Разблокировать" : "Заблокировать"))
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+    else if (_hasSearched)
+    {
+        <MudText Typo="Typo.h6" Class="mt-4" Style="text-align: center; opacity: 0.5;">Пользователи не найдены</MudText>
+    }
+</div>
+
+@code {
+    private string _searchQuery = "";
+    private List<UserBriefDto> _users = [];
+    private HashSet<Guid> _actioningIds = [];
+    private string? _actionType;
+    private Guid _currentUserId;
+    private bool _loading;
+    private bool _hasSearched;
+    private string _prevSearchQuery = "";
+    private Timer? _debounceTimer;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await TokenStore.LoadFromStorageAsync();
+        if (!TokenStore.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        var profile = await Auth.GetProfileAsync();
+        _currentUserId = profile?.Id ?? Guid.Empty;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) return;
+        if (_searchQuery == _prevSearchQuery) return;
+        _prevSearchQuery = _searchQuery;
+        _debounceTimer?.Dispose();
+        _debounceTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(SearchUsers);
+            _debounceTimer?.Dispose();
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private async Task SearchUsers()
+    {
+        if (string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            _users = [];
+            _hasSearched = false;
+            return;
+        }
+
+        _loading = true;
+        _hasSearched = true;
+        StateHasChanged();
+
+        _users = await Auth.SearchUsersAsync(_searchQuery, includeInactive: true);
+
+        _loading = false;
+    }
+
+    private async Task ToggleBlock(UserBriefDto user)
+    {
+        if (_actioningIds.Contains(user.Id)) return;
+
+        if (!user.IsBlocked)
+        {
+            var confirmed = await JS.InvokeAsync<bool>("confirm", $"Заблокировать пользователя {user.DisplayName}?");
+            if (!confirmed) return;
+        }
+
+        _actioningIds.Add(user.Id);
+        _actionType = "block";
+        StateHasChanged();
+
+        bool ok;
+        if (user.IsBlocked)
+            ok = await Auth.ReactivateUserAsync(user.Id);
+        else
+            ok = await Auth.DeactivateUserAsync(user.Id);
+
+        if (ok)
+        {
+            user.IsActive = !user.IsActive;
+            await JS.InvokeVoidAsync("showToast", user.IsBlocked
+                ? $"Пользователь {user.DisplayName} заблокирован"
+                : $"Пользователь {user.DisplayName} разблокирован");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("showToast", "Ошибка операции");
+        }
+
+        _actioningIds.Remove(user.Id);
+        _actionType = null;
+    }
+
+    private async Task ToggleRole(UserBriefDto user)
+    {
+        if (_actioningIds.Contains(user.Id)) return;
+
+        if (!user.IsAdmin)
+        {
+            var confirmed = await JS.InvokeAsync<bool>("confirm",
+                $"Сделать {user.DisplayName} администратором?");
+            if (!confirmed) return;
+        }
+
+        _actioningIds.Add(user.Id);
+        _actionType = "role";
+        StateHasChanged();
+
+        var newRole = user.IsAdmin ? 1 : 0;
+        var ok = await Auth.SetUserRoleAsync(user.Id, newRole);
+
+        if (ok)
+        {
+            user.Role = newRole;
+            await JS.InvokeVoidAsync("showToast", newRole == 0
+                ? $"{user.DisplayName} теперь администратор"
+                : $"Администратор {user.DisplayName} понижен до пользователя");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("showToast", "Ошибка изменения роли");
+        }
+
+        _actioningIds.Remove(user.Id);
+        _actionType = null;
+    }
+}

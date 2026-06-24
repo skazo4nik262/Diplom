@@ -83,6 +83,31 @@ public class CatalogService
         catch { return []; }
     }
 
+    public async Task<List<MovieDto>> SearchByMoodAsync(string mood, int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/movies/mood/{mood}")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("page", page)
+                .GetJsonAsync<List<MovieDto>>();
+        }
+        catch { return []; }
+    }
+
+    public async Task<List<MovieDto>> SearchByImageAsync(string query, int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/movies/search-by-image")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("query", query)
+                .SetQueryParam("page", page)
+                .GetJsonAsync<List<MovieDto>>();
+        }
+        catch { return []; }
+    }
+
     public async Task<MovieDto?> GetByIdAsync(int id)
     {
         try
@@ -181,21 +206,54 @@ public class CatalogService
         catch { return []; }
     }
 
-    public async Task<(int? Rating, string? Status)> GetUserMovieStatusAsync(int movieId)
+    public async Task<(int? Rating, string? Status, bool IsFavorite, double? LastPosition, double? Duration)> GetUserMovieStatusAsync(int movieId)
     {
         try
         {
             var response = await _flurl.Request($"api/catalog/user-movies/{movieId}/status")
                 .WithOAuthBearerToken(_tokenStore.Token ?? "")
                 .GetJsonAsync<UserMovieStatusResponse>();
-            return (response.Rating, response.Status);
+            return (response.Rating, response.Status, response.IsFavorite, response.LastPositionSeconds, response.DurationSeconds);
         }
         catch (FlurlHttpException ex) when (ex.StatusCode == 401)
         {
             await _tokenStore.ClearAsync();
             throw new UnauthorizedAccessException("Token expired or invalid");
         }
-        catch { return (null, null); }
+        catch { return (null, null, false, null, null); }
+    }
+
+    public async Task SaveProgressAsync(int movieId, double position, double duration)
+    {
+        try
+        {
+            await _flurl.Request($"api/catalog/user-movies/{movieId}/progress")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PutJsonAsync(new { position, duration });
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { }
+    }
+
+    public async Task<List<UserMovieDto>> GetContinueWatchingAsync(int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/user-movies/continue-watching")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("page", page)
+                .GetJsonAsync<List<UserMovieDto>>();
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { return []; }
     }
 
     public async Task RateMovieAsync(int movieId, int rating)
@@ -348,20 +406,29 @@ public class CatalogService
         catch { return null; }
     }
 
-    // Hardcoded TMDB genres — no backend endpoint needed and they rarely change
-    public static List<GenreDto> Genres =>
-    [
-        new() { Id = 28, Name = "Боевик" }, new() { Id = 12, Name = "Приключения" },
-        new() { Id = 16, Name = "Мультфильм" }, new() { Id = 35, Name = "Комедия" },
-        new() { Id = 80, Name = "Криминал" }, new() { Id = 99, Name = "Документальный" },
-        new() { Id = 18, Name = "Драма" }, new() { Id = 10751, Name = "Семейный" },
-        new() { Id = 14, Name = "Фэнтези" }, new() { Id = 36, Name = "История" },
-        new() { Id = 27, Name = "Ужасы" }, new() { Id = 10402, Name = "Музыка" },
-        new() { Id = 9648, Name = "Детектив" }, new() { Id = 10749, Name = "Мелодрама" },
-        new() { Id = 878, Name = "Фантастика" }, new() { Id = 10770, Name = "ТВ-фильм" },
-        new() { Id = 53, Name = "Триллер" }, new() { Id = 10752, Name = "Военный" },
-        new() { Id = 37, Name = "Вестерн" }
-    ];
+    // TMDB genres — fetched from backend
+    public async Task<List<GenreDto>> GetGenresAsync()
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/genres")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<List<GenreDto>>();
+        }
+        catch { return []; }
+    }
+
+    public async Task<List<GenreDto>> GetPopularGenresAsync(int count = 10)
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/genres/popular")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("count", count)
+                .GetJsonAsync<List<GenreDto>>();
+        }
+        catch { return []; }
+    }
 
     public async Task<List<PlaylistDto>> GetPlaylistsAsync()
     {
@@ -418,6 +485,18 @@ public class CatalogService
             await _tokenStore.ClearAsync();
             throw new UnauthorizedAccessException("Token expired or invalid");
         }
+    }
+
+    public async Task<List<MovieDto>> GetPlaylistSuggestionsAsync(int playlistId, int count = 5)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/playlists/{playlistId}/suggestions")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("count", count)
+                .GetJsonAsync<List<MovieDto>>();
+        }
+        catch { return []; }
     }
 
     public async Task RemoveMovieFromPlaylistAsync(int playlistId, int movieId)
@@ -556,7 +635,7 @@ public class CatalogService
         catch { return []; }
     }
 
-    private record UserMovieStatusResponse(int? Rating, string? Status);
+    private record UserMovieStatusResponse(int? Rating, string? Status, bool IsFavorite, double? LastPositionSeconds = null, double? DurationSeconds = null);
 
     public async Task<bool> DeletePlaylistAsync(int playlistId)
     {
@@ -600,6 +679,17 @@ public class CatalogService
             return await _flurl.Request($"api/catalog/users/{userId}/stats")
                 .WithOAuthBearerToken(_tokenStore.Token ?? "")
                 .GetJsonAsync<UserStatsDto>();
+        }
+        catch { return null; }
+    }
+
+    public async Task<TasteDnaDto?> GetUserTasteDnaAsync(Guid userId)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/users/{userId}/taste-dna")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<TasteDnaDto>();
         }
         catch { return null; }
     }
@@ -823,6 +913,115 @@ public class CatalogService
                 .GetJsonAsync<TasteComparisonDto>();
         }
         catch { return null; }
+    }
+    #endregion
+
+    #region Notifications
+    public async Task<NotificationSettingsDto> GetNotificationSettingsAsync()
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/users/notification-settings")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<NotificationSettingsDto>();
+        }
+        catch { return new NotificationSettingsDto(); }
+    }
+
+    public async Task SetNotificationSettingsAsync(bool? notifyNewInCollection, bool? notifyVideoAdded, bool? notifyFileAdded)
+    {
+        try
+        {
+            await _flurl.Request("api/catalog/users/notification-settings")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PutJsonAsync(new { notifyNewInCollection, notifyVideoAdded, notifyFileAdded });
+        }
+        catch { }
+    }
+    #endregion
+
+    #region Library Scan
+    public async Task<string?> StartScanAsync()
+    {
+        try
+        {
+            var response = await _flurl.Request("api/admin/movies/scan")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PostAsync();
+
+            var json = await response.GetStringAsync();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("message").GetString();
+        }
+        catch { return null; }
+    }
+
+    public async Task<ScanStatusDto?> GetScanStatusAsync()
+    {
+        try
+        {
+            return await _flurl.Request("api/admin/movies/scan/status")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<ScanStatusDto>();
+        }
+        catch { return null; }
+    }
+    #endregion
+
+    #region Embeddings
+    public async Task<string?> StartEmbeddingGenerationAsync(bool regenerateAll)
+    {
+        try
+        {
+            var url = regenerateAll
+                ? "api/catalog/movies/embeddings/regenerate-all"
+                : "api/catalog/movies/embeddings/generate-missing";
+
+            var response = await _flurl.Request(url)
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PostAsync();
+
+            var json = await response.GetStringAsync();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("message").GetString();
+        }
+        catch { return null; }
+    }
+
+    public async Task<EmbeddingGeneratorStatusDto?> GetEmbeddingStatusAsync()
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/movies/embeddings/status")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<EmbeddingGeneratorStatusDto>();
+        }
+        catch { return null; }
+    }
+    #endregion
+
+    #region Admin
+    public async Task<MovieFileDto?> GetMovieFileAsync(int tmdbId)
+    {
+        try
+        {
+            return await _flurl.Request($"api/admin/movies/{tmdbId}/file")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<MovieFileDto>();
+        }
+        catch { return null; }
+    }
+
+    public async Task<bool> DownloadViaTorrentAsync(int tmdbId, string magnetUrl)
+    {
+        try
+        {
+            await _flurl.Request("api/admin/movies/download")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PostJsonAsync(new { tmdbId, magnetUrl });
+            return true;
+        }
+        catch { return false; }
     }
     #endregion
 }

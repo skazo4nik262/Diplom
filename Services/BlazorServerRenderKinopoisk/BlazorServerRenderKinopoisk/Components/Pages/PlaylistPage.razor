@@ -49,6 +49,20 @@
                 }
             </div>
         }
+
+        @if (_suggestions.Count > 0)
+        {
+            <MudText Typo="Typo.h6" Class="mt-6 mb-2">Рекомендации для плейлиста</MudText>
+            <div class="profile-movie-grid">
+                @foreach (var movie in _suggestions)
+                {
+                    <div class="profile-movie-card" style="position: relative">
+                        <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)" />
+                        <button class="playlist-add-btn" @onclick="() => AddSuggested(movie.Id)" title="Добавить в плейлист">+</button>
+                    </div>
+                }
+            </div>
+        }
     }
 </div>
 
@@ -58,6 +72,7 @@
     private PlaylistDto? _playlist;
     private bool _loading = true;
     private Dictionary<int, UserMovieStatusDto> _userStatuses = [];
+    private List<MovieDto> _suggestions = [];
 
     private void GoBack() => Navigation.NavigateTo("/playlists");
     private void GoToMovie(int id) => Navigation.NavigateTo($"/movie/{id}");
@@ -81,6 +96,7 @@
             var ids = _playlist.Items.Where(i => i.MovieId > 0).Select(i => i.MovieId).Distinct().ToList();
             if (ids.Count > 0)
                 _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(ids);
+            _suggestions = await Catalog.GetPlaylistSuggestionsAsync(PlaylistId);
         }
 
         StateHasChanged();
@@ -97,6 +113,18 @@
             if (ids.Count > 0)
                 _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(ids);
         }
+        StateHasChanged();
+    }
+
+    private async Task AddSuggested(int movieId)
+    {
+        await Catalog.AddMovieToPlaylistAsync(PlaylistId, movieId);
+        Snackbar.Add("Добавлено в плейлист", Severity.Success);
+        _playlist = await Catalog.GetPlaylistAsync(PlaylistId);
+        _suggestions.RemoveAll(s => s.Id == movieId);
+        var ids = _playlist?.Items?.Where(i => i.MovieId > 0).Select(i => i.MovieId).Distinct().ToList();
+        if (ids?.Count > 0)
+            _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(ids);
         StateHasChanged();
     }
 

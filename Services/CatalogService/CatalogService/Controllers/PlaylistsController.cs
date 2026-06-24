@@ -40,6 +40,13 @@ public class PlaylistsController : ControllerBase
         return Ok(playlist);
     }
 
+    [HttpGet("{playlistId:int}/suggestions")]
+    public async Task<IActionResult> GetSuggestions(int playlistId, [FromQuery] int count = 5)
+    {
+        var suggestions = await _postgres.GetPlaylistSuggestionsAsync(playlistId, count);
+        return Ok(suggestions);
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreatePlaylist([FromBody] CreatePlaylistRequest request)
     {
