@@ -28,6 +28,7 @@ namespace BlazorServerRenderKinopoisk.Models
         [JsonPropertyName("revenue")] public long Revenue { get; set; }
         [JsonPropertyName("videos")] public List<VideoDto>? Videos { get; set; }
         [JsonPropertyName("images")] public List<ImageDto>? Images { get; set; }
+        [JsonPropertyName("matchPercentage")] public double? MatchPercentage { get; set; }
 
         public string PosterUrl => PosterPath is not null
             ? $"http://screeny.ddns.net/api/catalog/poster/w500{PosterPath}" : "";
@@ -122,16 +123,17 @@ namespace BlazorServerRenderKinopoisk.Models
         [JsonPropertyName("wikidataId")] public string? WikidataId { get; set; }
     }
 
-    public class ReviewDto
-    {
-        [JsonPropertyName("id")] public string Id { get; set; } = null!;
-        [JsonPropertyName("movieId")] public int MovieId { get; set; }
-        [JsonPropertyName("author")] public string? Author { get; set; }
-        [JsonPropertyName("authorRating")] public double? AuthorRating { get; set; }
-        [JsonPropertyName("content")] public string? Content { get; set; }
-        [JsonPropertyName("createdAt")] public DateTime? CreatedAt { get; set; }
-        [JsonPropertyName("updatedAt")] public DateTime? UpdatedAt { get; set; }
-    }
+public class ReviewDto
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = null!;
+    [JsonPropertyName("movieId")] public int MovieId { get; set; }
+    [JsonPropertyName("author")] public string? Author { get; set; }
+    [JsonPropertyName("authorRating")] public double? AuthorRating { get; set; }
+    [JsonPropertyName("content")] public string? Content { get; set; }
+    [JsonPropertyName("createdAt")] public DateTime? CreatedAt { get; set; }
+    [JsonPropertyName("updatedAt")] public DateTime? UpdatedAt { get; set; }
+    [JsonPropertyName("authorAvatarPath")] public string? AuthorAvatarPath { get; set; }
+}
 
     public class PlaylistDto
     {

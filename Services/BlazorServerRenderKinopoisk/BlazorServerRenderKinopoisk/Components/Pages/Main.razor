@@ -25,16 +25,48 @@
         </div>
     }
 
-    @if (_popularGenres.Count > 0)
+    <div class="mood-filter">
+        <span style="font-size: 0.9rem; font-weight: 600; color: rgba(255,255,255,0.6); align-self: center; white-space: nowrap;">Что посмотреть:</span>
+        @foreach (var mood in _moods)
+        {
+            <button class="mood-chip@(_selectedMood == mood.Key ? " selected" : "")"
+                    @onclick="() => SelectMood(mood.Key)">
+                @mood.Value
+            </button>
+        }
+    </div>
+
+    @if (_selectedMood is not null)
     {
-        <div class="genre-bar mt-4 mb-4">
-            @foreach (var genre in _popularGenres)
-            {
-                <button class="genre-pill" @onclick="() => GoToGenre(genre.Id)">
-                    @genre.Name
-                </button>
-            }
-        </div>
+        <MudText Typo="Typo.h5" Class="mb-2 mt-4">Настроение: @(_moods.GetValueOrDefault(_selectedMood))</MudText>
+        @if (_moodLoading)
+        {
+            <div class="carousel-wrapper">
+                <div class="carousel">
+                    @for (var i = 0; i < 8; i++)
+                    {
+                        <div class="skeleton-card">
+                            <div class="skeleton skeleton-poster"></div>
+                            <div class="skeleton skeleton-text"></div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else if (_moodMovies.Count > 0)
+        {
+            <div class="carousel-wrapper">
+                <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.mood-carousel'), -1)" type="button">‹</button>
+                <div class="mood-carousel carousel">
+                    @foreach (var movie in _moodMovies)
+                    {
+                        <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)"
+                                   OnHover="HoverMovie" OnUnhover="UnhoverMovie" OnMouseMove="TrackMouse" />
+                    }
+                </div>
+                <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.mood-carousel'), 1)" type="button">›</button>
+            </div>
+        }
     }
 
     @if (trendingMovies.Count > 0)
@@ -146,8 +178,24 @@
     private List<MovieDto> recommendedMovies = [];
     private List<MovieDto> trendingMovies = [];
     private List<MovieDto> continueWatchingMovies = [];
-    private List<GenreDto> _popularGenres = [];
     private bool isLoading = true;
+
+    private static readonly Dictionary<string, string> _moods = new()
+    {
+        ["sad"] = "Грустное",
+        ["happy"] = "Веселое",
+        ["romantic"] = "Романтичное",
+        ["scary"] = "Страшное",
+        ["inspiring"] = "Мотивирующее",
+        ["mysterious"] = "Загадочное",
+        ["epic"] = "Эпическое",
+        ["touching"] = "Трогательное",
+        ["atmospheric"] = "Атмосферное",
+        ["crazy"] = "Безумное"
+    };
+    private string? _selectedMood;
+    private List<MovieDto> _moodMovies = [];
+    private bool _moodLoading;
     private Dictionary<int, UserMovieStatusDto> _userStatuses = [];
 
     private MovieDto? _hoveredMovie;
@@ -156,7 +204,29 @@
     private double _mouseY;
     private List<ActivityEventDto> _activityFeed = [];
 
-    private void GoToGenre(int genreId) => Navigation.NavigateTo($"/search?genreIds={genreId}");
+    private async Task SelectMood(string mood)
+    {
+        if (_selectedMood == mood)
+        {
+            _selectedMood = null;
+            _moodMovies = [];
+            return;
+        }
+
+        _selectedMood = mood;
+        _moodLoading = true;
+        _moodMovies = [];
+        StateHasChanged();
+
+        try
+        {
+            _moodMovies = await Catalog.SearchByMoodAsync(mood, 1);
+        }
+        catch { }
+
+        _moodLoading = false;
+        StateHasChanged();
+    }
 
     private void GoToEvent(ActivityEventDto evt)
     {
@@ -208,7 +278,6 @@
                 .Select(m => m.Id).Distinct().ToList();
             _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(allIds);
             _activityFeed = await Catalog.GetFeedAsync();
-            _popularGenres = await Catalog.GetPopularGenresAsync(12);
         }
         catch (UnauthorizedAccessException)
         {

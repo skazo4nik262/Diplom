@@ -9,6 +9,10 @@
         <div class="movie-rating-badge@(Movie.VoteAverage > 7.0 ? " high-rating" : "")">
             @Movie.RatingText
         </div>
+        @if (Movie.MatchPercentage.HasValue)
+        {
+            <div class="movie-match-badge">@($"{Movie.MatchPercentage.Value:F0}%")</div>
+        }
         @if (UserStatus?.Status is not null)
         {
             <div class="movie-status-badge status-@UserStatus.Status">@StatusText(UserStatus.Status)</div>

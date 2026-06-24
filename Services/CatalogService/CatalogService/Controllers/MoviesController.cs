@@ -151,20 +151,23 @@ public class MoviesController : ControllerBase
         [FromQuery] int? runtimeFrom = null,
         [FromQuery] int? runtimeTo = null,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortOrder = null)
-    {
-        var parsedGenreIds = genreIds?.Split(',', StringSplitOptions.RemoveEmptyEntries)
+        [FromQuery] string? sortOrder = null,
+        [FromQuery] int? personId = null,
+        [FromQuery] string? country = null)
+        {
+            var parsedGenreIds = genreIds?.Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(id => int.TryParse(id, out var g) ? g : (int?)null)
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
             .ToList();
 
         if (string.IsNullOrWhiteSpace(query) && (parsedGenreIds is null || parsedGenreIds.Count == 0)
-            && !yearFrom.HasValue && !yearTo.HasValue && !ratingFrom.HasValue && !ratingTo.HasValue)
+            && !yearFrom.HasValue && !yearTo.HasValue && !ratingFrom.HasValue && !ratingTo.HasValue
+            && !personId.HasValue && string.IsNullOrEmpty(country))
             return BadRequest("At least one filter parameter is required.");
 
-        var results = await _postgres.SearchMoviesAsync(query, page, parsedGenreIds,
-            yearFrom, yearTo, ratingFrom, ratingTo, runtimeFrom, runtimeTo, sortBy, sortOrder);
+            var results = await _postgres.SearchMoviesAsync(query, page, parsedGenreIds,
+                yearFrom, yearTo, ratingFrom, ratingTo, runtimeFrom, runtimeTo, sortBy, sortOrder, personId, country);
         if (results.Count != 0 || parsedGenreIds?.Count > 0) return Ok(results);
 
         try

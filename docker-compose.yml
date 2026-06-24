@@ -78,7 +78,7 @@ services:
       - http_proxy=socks5://vless-proxy:1080
       - https_proxy=socks5://vless-proxy:1080
       - DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=1
-      - NO_PROXY=localhost,127.0.0.1
+      - NO_PROXY=localhost,127.0.0.1,identity-service,embedding-service,postgres,ollama,oclip,cache-image-service,catalog-service
 #----------------------------------------------------------------
   identity-service:
     build: ./Services/IdentityService/IdentityService

@@ -1,4 +1,5 @@
-﻿using BlazorServerRenderKinopoisk.Models;
+﻿using System.Net.Http.Json;
+using BlazorServerRenderKinopoisk.Models;
 using Flurl.Http;
 
 namespace BlazorServerRenderKinopoisk.Services
@@ -79,6 +80,43 @@ namespace BlazorServerRenderKinopoisk.Services
             catch { return null; }
         }
 
+        public async Task<string?> UploadAvatarAsync(Stream fileStream, string fileName)
+        {
+            try
+            {
+                using var ms = new MemoryStream();
+                await fileStream.CopyToAsync(ms);
+                ms.Position = 0;
+
+                var ext = Path.GetExtension(fileName).ToLowerInvariant();
+                var mime = ext switch
+                {
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".png" => "image/png",
+                    ".gif" => "image/gif",
+                    ".webp" => "image/webp",
+                    _ => "application/octet-stream"
+                };
+
+                using var content = new MultipartFormDataContent();
+                using var streamContent = new ByteArrayContent(ms.ToArray());
+                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mime);
+                content.Add(streamContent, "file", fileName);
+
+                var client = _flurl.HttpClient;
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{_flurl.BaseUrl}api/auth/avatar");
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _tokenStore.Token ?? "");
+                request.Content = content;
+
+                var response = await client.SendAsync(request);
+                if (!response.IsSuccessStatusCode) return null;
+
+                var body = await response.Content.ReadFromJsonAsync<AvatarUploadResponse>();
+                return body?.Url;
+            }
+            catch { return null; }
+        }
+
         public async Task<ProfileResponse?> UpdateProfileAsync(string? username, string? bio, DateTime? birthday, string? avatarUrl)
         {
             try
@@ -153,4 +191,5 @@ namespace BlazorServerRenderKinopoisk.Services
         }
     }
     public record ErrorBody(string Error);
+    public record AvatarUploadResponse(string Url);
 }

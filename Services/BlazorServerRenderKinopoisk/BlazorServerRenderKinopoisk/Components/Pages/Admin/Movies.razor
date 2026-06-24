@@ -7,13 +7,17 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<div class="admin-page">
-    @if (!TokenStore.IsAdmin)
-    {
-        <MudText Typo="Typo.h5" Class="mt-8" Style="text-align: center; opacity: 0.5;">Доступ запрещён</MudText>
-        return;
-    }
-
+@if (!_isReady)
+{
+    <!-- wait for auth -->
+}
+else if (!TokenStore.IsAdmin)
+{
+    <MudText Typo="Typo.h5" Class="mt-8" Style="text-align: center; opacity: 0.5;">Доступ запрещён</MudText>
+}
+else
+{
+    <div class="admin-page">
     <div class="admin-toolbar">
         <MudButton Variant="Variant.Filled" Color="Color.Primary"
                    OnClick="@StartScan" Disabled="@(_scanStatus?.IsRunning == true)">
@@ -156,10 +160,12 @@
         <MudText Typo="Typo.h6" Class="mt-8" Style="text-align: center; opacity: 0.3;">Введите название для поиска</MudText>
     }
 </div>
+}
 
 @code {
     [SupplyParameterFromQuery] public string? Query { get; set; }
 
+    private bool _isReady;
     private List<MovieDto> _movies = [];
     private Dictionary<int, string> _magnetInputs = [];
     private HashSet<int> _sendingIds = [];
@@ -272,6 +278,8 @@
     {
         if (!firstRender) return;
         await TokenStore.LoadFromStorageAsync();
+        _isReady = true;
+        StateHasChanged();
         if (!TokenStore.IsAuthenticated)
         {
             Navigation.NavigateTo("/login");

@@ -5,6 +5,7 @@
 @inject CatalogService Catalog
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject IConfiguration Configuration
 
 <div class="mt-4 page-fade-in">
     @if (_movie is null)
@@ -248,6 +249,54 @@
                         </div>
                     }
                 </div>
+                <div class="movie-detail-playlist-section">
+                    <button class="movie-detail-playlist-btn" @onclick="ShowPlaylistDialog"
+                            disabled="@_playlistSending">
+                        + В плейлист
+                    </button>
+                    @if (_playlistSending)
+                    {
+                        <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-2" />
+                    }
+                </div>
+                @if (_showPlaylistDialog)
+                {
+                    <div class="dialog-overlay" @onclick="ClosePlaylistDialog">
+                        <div class="dialog-content" @onclick:stopPropagation>
+                            <MudText Typo="Typo.h6" Class="mb-4">Добавить в плейлист</MudText>
+                            @if (_playlists is null)
+                            {
+                                <MudProgressCircular Indeterminate />
+                            }
+                            else if (_playlists.Count == 0)
+                            {
+                                <MudText Typo="Typo.body2" Style="opacity: 0.5">Нет плейлистов</MudText>
+                                <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                           @onclick="GoToPlaylists" Class="mt-2">Создать плейлист</MudButton>
+                            }
+                            else
+                            {
+                                <div style="max-height: 300px; overflow-y: auto;">
+                                    @foreach (var pl in _playlists)
+                                    {
+                                        <div class="playlist-dialog-item @(pl.MovieCount > 0 ? "" : "empty")"
+                                             @onclick="() => AddToPlaylist(pl.Id)">
+                                            <span>@pl.Name</span>
+                                            <span style="opacity: 0.5; font-size: 0.8rem;">@pl.MovieCount</span>
+                                            @if (_addingPlaylistId == pl.Id)
+                                            {
+                                                <MudProgressCircular Indeterminate Size="Size.Small" Class="ml-auto" />
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            <div class="d-flex justify-end mt-4">
+                                <MudButton Variant="Variant.Text" @onclick="ClosePlaylistDialog">Закрыть</MudButton>
+                            </div>
+                        </div>
+                    </div>
+                }
                 <div class="movie-detail-overview">
                     <span>@DisplayOverview</span>
                     @if (ShowExpandButton)
@@ -364,19 +413,35 @@
                     </div>
                 </div>
             }
-            @if (_similarMovies?.Count > 0)
+            @if (_plotSimilarMovies?.Count > 0)
             {
                 <div class="mt-4">
-                    <MudText Typo="Typo.h5" Class="mb-2">Похожие фильмы</MudText>
+                    <MudText Typo="Typo.h5" Class="mb-2">Похожие по сюжету</MudText>
                     <div class="carousel-wrapper">
-                        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.similar-carousel'), -1)" type="button">‹</button>
-                        <div class="similar-carousel carousel">
-                            @foreach (var movie in _similarMovies)
+                        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.plot-similar-carousel'), -1)" type="button">‹</button>
+                        <div class="plot-similar-carousel carousel">
+                            @foreach (var movie in _plotSimilarMovies)
                             {
                                 <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)" />
                             }
                         </div>
-                        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.similar-carousel'), 1)" type="button">›</button>
+                        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.plot-similar-carousel'), 1)" type="button">›</button>
+                    </div>
+                </div>
+            }
+            @if (_atmosphereSimilarMovies?.Count > 0)
+            {
+                <div class="mt-4">
+                    <MudText Typo="Typo.h5" Class="mb-2">Похожие по атмосфере</MudText>
+                    <div class="carousel-wrapper">
+                        <button class="carousel-arrow carousel-arrow-left" onclick="scrollCarousel(this.parentElement.querySelector('.atmosphere-carousel'), -1)" type="button">‹</button>
+                        <div class="atmosphere-carousel carousel">
+                            @foreach (var movie in _atmosphereSimilarMovies)
+                            {
+                                <MovieCard Movie="movie" UserStatus="_userStatuses.GetValueOrDefault(movie.Id)" />
+                            }
+                        </div>
+                        <button class="carousel-arrow carousel-arrow-right" onclick="scrollCarousel(this.parentElement.querySelector('.atmosphere-carousel'), 1)" type="button">›</button>
                     </div>
                 </div>
             }
@@ -410,6 +475,20 @@
                         {
                             <div class="review-card" id="review-@review.Id">
                                 <div class="review-header">
+                                    @{
+                                        var reviewAvatarUrl = string.IsNullOrEmpty(review.AuthorAvatarPath) ? null
+                                            : $"{Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net"}{review.AuthorAvatarPath}";
+                                    }
+                                    @if (reviewAvatarUrl is not null)
+                                    {
+                                        <div class="review-author-avatar" style="background-image: url('@reviewAvatarUrl')"></div>
+                                    }
+                                    else
+                                    {
+                                        <div class="review-author-avatar no-avatar">
+                                            <span>@(review.Author?[..1].ToUpper() ?? "?")</span>
+                                        </div>
+                                    }
                                     <span class="review-author">@(review.Author ?? "Пользователь")</span>
                                     @if (review.AuthorRating.HasValue)
                                     {
@@ -526,7 +605,8 @@
     private MovieDto? _movie;
     private List<CastDto>? _cast;
     private List<CrewDto> _crew = [];
-    private List<MovieDto>? _similarMovies;
+    private List<MovieDto>? _plotSimilarMovies;
+    private List<MovieDto>? _atmosphereSimilarMovies;
     private CollectionDto? _collection;
     private List<VideoDto>? _trailers;
     private List<ImageDto>? _backdrops;
@@ -558,6 +638,10 @@
     private string _magnetUrl = "";
     private bool _downloadSending;
     private bool _canDownload => !_downloadSending && !string.IsNullOrWhiteSpace(_magnetUrl);
+    private bool _showPlaylistDialog;
+    private List<PlaylistDto>? _playlists;
+    private bool _playlistSending;
+    private int? _addingPlaylistId;
 
     private static string StatusDisplayText(string status) => status switch
     {
@@ -720,6 +804,35 @@
         }
     }
 
+    private async Task ShowPlaylistDialog()
+    {
+        _showPlaylistDialog = true;
+        _playlists = null;
+        StateHasChanged();
+        _playlists = await Catalog.GetPlaylistsAsync();
+        StateHasChanged();
+    }
+
+    private void ClosePlaylistDialog()
+    {
+        _showPlaylistDialog = false;
+        _playlists = null;
+        _addingPlaylistId = null;
+    }
+
+    private async Task AddToPlaylist(int playlistId)
+    {
+        _playlistSending = true;
+        _addingPlaylistId = playlistId;
+        StateHasChanged();
+        await Catalog.AddMovieToPlaylistAsync(playlistId, MovieId);
+        _addingPlaylistId = null;
+        _playlistSending = false;
+        ClosePlaylistDialog();
+    }
+
+    private void GoToPlaylists() => Navigation.NavigateTo("/playlists");
+
     private async Task ToggleReviewLike(string reviewId, bool isPositive)
     {
         var current = _reviewLikes.GetValueOrDefault(reviewId);
@@ -853,7 +966,8 @@
         _movie = null;
         _cast = null;
         _crew = [];
-        _similarMovies = null;
+        _plotSimilarMovies = null;
+        _atmosphereSimilarMovies = null;
         _collection = null;
         _trailers = null;
         _backdrops = null;
@@ -879,18 +993,20 @@
             var movieTask = Catalog.GetByIdAsync(MovieId);
             var castTask = Catalog.GetCreditsAsync(MovieId);
             var crewTask = Catalog.GetCrewAsync(MovieId);
-            var similarTask = Catalog.GetSimilarAsync(MovieId);
+            var plotSimilarTask = Catalog.GetSimilarAsync(MovieId);
+            var atmosphereSimilarTask = Catalog.GetSimilarByAtmosphereAsync(MovieId);
             var statusTask = Catalog.GetUserMovieStatusAsync(MovieId);
             var collectionTask = Catalog.GetCollectionAsync(MovieId);
             var reviewsTask = Catalog.GetMovieReviewsAsync(MovieId);
             var ratingDistTask = Catalog.GetMovieRatingDistributionAsync(MovieId);
             var videosTask = Catalog.GetMovieVideosAsync(MovieId);
             var fileTask = Catalog.GetMovieFileAsync(MovieId);
-            await Task.WhenAll(movieTask, castTask, crewTask, similarTask, statusTask, collectionTask, reviewsTask, ratingDistTask, videosTask, fileTask);
+            await Task.WhenAll(movieTask, castTask, crewTask, plotSimilarTask, atmosphereSimilarTask, statusTask, collectionTask, reviewsTask, ratingDistTask, videosTask, fileTask);
             _movie = movieTask.Result;
             _cast = castTask.Result;
             _crew = crewTask.Result;
-            _similarMovies = similarTask.Result;
+            _plotSimilarMovies = plotSimilarTask.Result;
+            _atmosphereSimilarMovies = atmosphereSimilarTask.Result;
             _collection = collectionTask.Result;
             _reviews = reviewsTask.Result;
             _ratingDistribution = ratingDistTask.Result;
@@ -917,8 +1033,10 @@
             var allIds = new List<int>();
             if (_collection?.Movies?.Count > 0)
                 allIds.AddRange(_collection.Movies.Select(m => m.Id));
-            if (_similarMovies?.Count > 0)
-                allIds.AddRange(_similarMovies.Select(m => m.Id));
+            if (_plotSimilarMovies?.Count > 0)
+                allIds.AddRange(_plotSimilarMovies.Select(m => m.Id));
+            if (_atmosphereSimilarMovies?.Count > 0)
+                allIds.AddRange(_atmosphereSimilarMovies.Select(m => m.Id));
             if (allIds.Count > 0)
                 _userStatuses = await Catalog.GetUserMoviesStatusBatchAsync(allIds.Distinct().ToList());
 

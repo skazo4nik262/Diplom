@@ -17,6 +17,8 @@ namespace CatalogService.Services
         private readonly ICacheImageClient _cacheImage;
         private readonly ITmdbService _tmdb;
         private const int PageSize = 20;
+        private const double TextSimilarityThreshold = 0.35;
+        private const double ImageSimilarityThreshold = 0.55;
 
         public PostgresService(TmdbDbContext db, IEmbeddingClient embedding, ICacheImageClient cacheImage, ITmdbService tmdb)
         {
@@ -67,7 +69,8 @@ namespace CatalogService.Services
 
         public async Task<List<MovieEntity>> SearchMoviesAsync(string query, int page, List<int>? genreIds = null,
             int? yearFrom = null, int? yearTo = null, double? ratingFrom = null, double? ratingTo = null,
-            int? runtimeFrom = null, int? runtimeTo = null, string? sortBy = null, string? sortOrder = null)
+            int? runtimeFrom = null, int? runtimeTo = null, string? sortBy = null, string? sortOrder = null,
+            int? personId = null, string? country = null)
         {
             var baseQuery = _db.Movies
                 .Include(m => m.Collection)
@@ -82,6 +85,9 @@ namespace CatalogService.Services
 
             if (genreIds?.Count > 0)
                 baseQuery = baseQuery.Where(m => m.Genres.Any(g => genreIds.Contains(g.Id)));
+
+            if (personId.HasValue)
+                baseQuery = baseQuery.Where(m => m.Cast.Any(c => c.PersonId == personId.Value));
 
             if (yearFrom.HasValue)
             {
@@ -101,6 +107,12 @@ namespace CatalogService.Services
                 baseQuery = baseQuery.Where(m => m.Runtime >= runtimeFrom.Value);
             if (runtimeTo.HasValue)
                 baseQuery = baseQuery.Where(m => m.Runtime <= runtimeTo.Value);
+
+            if (!string.IsNullOrEmpty(country))
+            {
+                var countryCodes = country.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                baseQuery = baseQuery.Where(m => m.ProductionCountries.Any(pc => countryCodes.Contains(pc.Iso3166_1)));
+            }
 
             baseQuery = (sortBy?.ToLower(), sortOrder?.ToLower()) switch
             {
@@ -671,6 +683,13 @@ namespace CatalogService.Services
                 .ToListAsync();
         }
 
+        public async Task<List<ProductionCountryEntity>> GetCountriesAsync()
+        {
+            return await _db.ProductionCountries
+                .OrderBy(c => c.Name)
+                .ToListAsync();
+        }
+
         public async Task<List<GenreEntity>> GetPopularGenresAsync(int count = 10)
         {
             return await _db.Genres
@@ -1182,6 +1201,16 @@ namespace CatalogService.Services
                 .OrderByDescending(p => p.Popularity)
                 .FirstOrDefaultAsync();
         }
+
+        public async Task<List<PersonEntity>> SearchPeopleMultipleAsync(string query, int limit = 10)
+        {
+            return await _db.People
+                .Include(p => p.ExternalIds)
+                .Where(p => p.Name != null && EF.Functions.ILike(p.Name, $"%{query}%"))
+                .OrderByDescending(p => p.Popularity)
+                .Take(limit)
+                .ToListAsync();
+        }
         public async Task SetMovieStatusAsync(Guid userId, int tmdbId, string status)
         {
             var entry = await _db.UserMovies
@@ -1379,11 +1408,12 @@ namespace CatalogService.Services
             var offset = (page - 1) * PageSize;
             var fetch = limit > 0 ? limit : PageSize;
 
-            var ids = await _db.Database.SqlQueryRaw<int>(
-                "SELECT e.\"MovieId\" FROM \"MovieEmbeddings\" e ORDER BY e.\"Embedding\"::vector <=> {0}::vector LIMIT {1} OFFSET {2}",
+            var rows = await _db.Database.SqlQueryRaw<MovieIdDistance>(
+                "SELECT e.\"MovieId\", e.\"Embedding\"::vector <=> {0}::vector AS \"Distance\" FROM \"MovieEmbeddings\" e ORDER BY \"Distance\" LIMIT {1} OFFSET {2}",
                 vectorStr, fetch + exclude.Count, 0).ToListAsync();
 
-            var filtered = exclude.Count > 0 ? ids.Where(id => !exclude.Contains(id)).ToList() : ids;
+            rows = rows.Where(r => r.Distance <= TextSimilarityThreshold).ToList();
+            var filtered = exclude.Count > 0 ? rows.Where(r => !exclude.Contains(r.MovieId)).ToList() : rows;
             var paged = filtered.Skip(offset).Take(PageSize).ToList();
 
             if (paged.Count == 0) return [];
@@ -1391,11 +1421,20 @@ namespace CatalogService.Services
             var movies = await _db.Movies
                 .Include(m => m.Collection)
                 .Include(m => m.Genres)
-                .Where(m => paged.Contains(m.Id))
+                .Where(m => paged.Select(r => r.MovieId).Contains(m.Id))
                 .ToListAsync();
 
-            return paged.Select(id => movies.First(m => m.Id == id)).ToList();
+            var ordered = paged.Select(r =>
+            {
+                var m = movies.First(m => m.Id == r.MovieId);
+                m.MatchPercentage = Math.Round((1.0 - Math.Min(r.Distance, 1.0)) * 100, 1);
+                return m;
+            }).ToList();
+
+            return ordered;
         }
+
+        private record MovieIdDistance(int MovieId, double Distance);
 
         private async Task<List<MovieEntity>> FindNearestMoviesByImageAsync(float[] target, List<int>? excludeIds, int page, int limit = 0)
         {
@@ -1404,11 +1443,12 @@ namespace CatalogService.Services
             var offset = (page - 1) * PageSize;
             var fetch = limit > 0 ? limit : PageSize;
 
-            var ids = await _db.Database.SqlQueryRaw<int>(
-                "SELECT e.\"MovieId\" FROM \"MovieEmbeddings\" e WHERE e.\"ImageEmbedding\" IS NOT NULL ORDER BY e.\"ImageEmbedding\"::vector <=> {0}::vector LIMIT {1} OFFSET {2}",
+            var rows = await _db.Database.SqlQueryRaw<MovieIdDistance>(
+                "SELECT e.\"MovieId\", e.\"ImageEmbedding\"::vector <=> {0}::vector AS \"Distance\" FROM \"MovieEmbeddings\" e WHERE e.\"ImageEmbedding\" IS NOT NULL ORDER BY \"Distance\" LIMIT {1} OFFSET {2}",
                 vectorStr, fetch + exclude.Count, 0).ToListAsync();
 
-            var filtered = exclude.Count > 0 ? ids.Where(id => !exclude.Contains(id)).ToList() : ids;
+            rows = rows.Where(r => r.Distance <= ImageSimilarityThreshold).ToList();
+            var filtered = exclude.Count > 0 ? rows.Where(r => !exclude.Contains(r.MovieId)).ToList() : rows;
             var paged = filtered.Skip(offset).Take(PageSize).ToList();
 
             if (paged.Count == 0) return [];
@@ -1416,10 +1456,17 @@ namespace CatalogService.Services
             var movies = await _db.Movies
                 .Include(m => m.Collection)
                 .Include(m => m.Genres)
-                .Where(m => paged.Contains(m.Id))
+                .Where(m => paged.Select(r => r.MovieId).Contains(m.Id))
                 .ToListAsync();
 
-            return paged.Select(id => movies.First(m => m.Id == id)).ToList();
+            var ordered = paged.Select(r =>
+            {
+                var m = movies.First(m => m.Id == r.MovieId);
+                m.MatchPercentage = Math.Round((1.0 - Math.Min(r.Distance, 1.0)) * 100, 1);
+                return m;
+            }).ToList();
+
+            return ordered;
         }
 
         public async Task<List<VideoEntity>> GetMovieVideosAsync(int tmdbId)

@@ -26,6 +26,9 @@ public class FriendsController : ControllerBase
     {
         var userId = GetUserId();
         if (userId == Guid.Empty) return Unauthorized();
+        var targetUser = await _postgres.GetUserByIdAsync(targetUserId);
+        if (targetUser is null) return NotFound(new { error = "Пользователь не найден" });
+        if (targetUser.Role == 0) return BadRequest(new { error = "Нельзя подписаться на администратора" });
         await _postgres.FollowUserAsync(userId, targetUserId);
         await _postgres.RecordActivityAsync(userId, "followed_user");
         await _postgres.CreateNotificationAsync(targetUserId, userId, "followed_user");

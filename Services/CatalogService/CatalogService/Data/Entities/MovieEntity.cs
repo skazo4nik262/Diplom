@@ -1,8 +1,13 @@
+using System.Text.Json.Serialization;
+
 namespace CatalogService.Data.Entities;
 
 public class MovieEntity
 {
     public int Id { get; set; }
+
+    [JsonPropertyName("matchPercentage")]
+    public double? MatchPercentage { get; set; }
     public bool Adult { get; set; }
     public string? BackdropPath { get; set; }
     public int? BelongsToCollectionId { get; set; }

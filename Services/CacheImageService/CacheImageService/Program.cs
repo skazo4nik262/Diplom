@@ -12,6 +12,13 @@ builder.Services.AddHttpClient("tmdb", client =>
     PooledConnectionLifetime = TimeSpan.FromMinutes(5)
 });
 
+var identityUrl = builder.Configuration.GetValue<string>("IdentityService:Url") ?? "http://identity-service:5001";
+builder.Services.AddHttpClient("identity", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.BaseAddress = new Uri(identityUrl);
+});
+
 builder.Services.AddSingleton<ImageCacheService>();
 
 var app = builder.Build();

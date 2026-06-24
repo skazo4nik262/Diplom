@@ -3,6 +3,7 @@
 @inject CatalogService Catalog
 @inject AuthService AuthService
 @inject NavigationManager Navigation
+@inject IConfiguration Configuration
 
 <div class="mt-4">
     <MudText Typo="Typo.h5" Class="mb-4">Друзья</MudText>
@@ -11,16 +12,23 @@
         <MudTextField @bind-Value="_searchQuery" Placeholder="Поиск пользователей..."
                       Variant="Variant.Outlined" Immediate="true"
                       @bind-Value:after="SearchUsers" Class="mb-2" />
-        @if (_searchResults.Count > 0)
+        @if (_searchLoading)
+        {
+            <div class="d-flex justify-center mt-4"><MudProgressCircular Indeterminate Size="Size.Small" /></div>
+        }
+        else if (_searchResults.Count > 0)
         {
             <div class="friends-grid">
                 @foreach (var user in _searchResults)
                 {
                     <div class="friend-card" @onclick="() => GoToUser(user.Id)">
-                        <div class="friend-avatar">@GetInitials(user)</div>
+                        <div class="friend-avatar @(user.AvatarUrl is null ? "initials" : null)"
+                             style="@(user.AvatarUrl is null ? null : "background-image: url('" + AvatarUrl(user) + "')")">
+                            @if (user.AvatarUrl is null) { @GetInitials(user) }
+                        </div>
                         <div class="friend-name">@user.DisplayName</div>
                         <MudText Typo="Typo.caption" Style="opacity: 0.5">@user.Login</MudText>
-                        @if (user.Id != _myId)
+                        @if (user.Id != _myId && !user.IsAdmin)
                         {
                             <span @onclick:stopPropagation>
                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
@@ -51,7 +59,10 @@
                     @foreach (var user in _following)
                     {
                         <div class="friend-card" @onclick="() => GoToUser(user.Id)">
-                            <div class="friend-avatar">@GetInitials(user)</div>
+                            <div class="friend-avatar @(user.AvatarUrl is null ? "initials" : null)"
+                             style="@(user.AvatarUrl is null ? null : "background-image: url('" + AvatarUrl(user) + "')")">
+                            @if (user.AvatarUrl is null) { @GetInitials(user) }
+                        </div>
                             <div class="friend-name">@user.DisplayName</div>
                             <MudIconButton Icon="@Icons.Material.Filled.PersonRemove" Size="Size.Small"
                                            Color="Color.Error"
@@ -76,7 +87,10 @@
                     @foreach (var user in _followers)
                     {
                         <div class="friend-card" @onclick="() => GoToUser(user.Id)">
-                            <div class="friend-avatar">@GetInitials(user)</div>
+                            <div class="friend-avatar @(user.AvatarUrl is null ? "initials" : null)"
+                             style="@(user.AvatarUrl is null ? null : "background-image: url('" + AvatarUrl(user) + "')")">
+                            @if (user.AvatarUrl is null) { @GetInitials(user) }
+                        </div>
                             <div class="friend-name">@user.DisplayName</div>
                         </div>
                     }
@@ -90,6 +104,7 @@
     private int _activeTab;
     private bool _loadingFollowing = true;
     private bool _loadingFollowers = true;
+    private bool _searchLoading;
     private List<UserBriefDto> _following = [];
     private List<UserBriefDto> _followers = [];
     private List<UserBriefDto> _searchResults = [];
@@ -122,7 +137,10 @@
             _searchResults = [];
             return;
         }
+        _searchLoading = true;
+        StateHasChanged();
         _searchResults = await AuthService.SearchUsersAsync(_searchQuery);
+        _searchLoading = false;
         StateHasChanged();
     }
 
@@ -154,4 +172,11 @@
     }
 
     private void GoToUser(Guid userId) => Navigation.NavigateTo($"/user/{userId}");
+
+    private string AvatarUrl(UserBriefDto user)
+    {
+        if (string.IsNullOrEmpty(user.AvatarUrl)) return "";
+        var baseUrl = Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net";
+        return $"{baseUrl}{user.AvatarUrl}";
+    }
 }

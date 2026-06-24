@@ -11,8 +11,18 @@
 
             <MudTextField @bind-Value="login" Label="Логин" Variant="Variant.Outlined" Class="mb-4" />
             <MudTextField @bind-Value="username" Label="Имя пользователя (необязательно)" Variant="Variant.Outlined" Class="mb-4" />
-            <MudTextField @bind-Value="password" Label="Пароль" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-4" />
-            <MudTextField @bind-Value="confirmPassword" Label="Подтвердите пароль" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-6" />
+            <MudTextField @bind-Value="password" Label="Пароль" Variant="Variant.Outlined"
+                         InputType="@(_showPassword ? InputType.Text : InputType.Password)" Class="mb-4"
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                         IconSize="Size.Small"
+                         OnAdornmentClick="@(() => _showPassword = !_showPassword)" />
+            <MudTextField @bind-Value="confirmPassword" Label="Подтвердите пароль" Variant="Variant.Outlined"
+                         InputType="@(_showConfirmPassword ? InputType.Text : InputType.Password)" Class="mb-6"
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@(_showConfirmPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                         IconSize="Size.Small"
+                         OnAdornmentClick="@(() => _showConfirmPassword = !_showConfirmPassword)" />
 
             <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
                        Disabled="@isLoading" OnClick="@HandleRegister" Class="mb-4" Size="Size.Large">
@@ -36,6 +46,8 @@
     private string password = "";
     private string confirmPassword = "";
     private bool isLoading;
+    private bool _showPassword;
+    private bool _showConfirmPassword;
 
     private async Task HandleRegister()
     {
@@ -45,9 +57,10 @@
             return;
         }
 
-        if (password.Length < 8)
+        var passwordError = CheckPasswordStrength(password);
+        if (passwordError is not null)
         {
-            Snackbar.Add("Password must be at least 8 characters", Severity.Warning);
+            Snackbar.Add(passwordError, Severity.Warning);
             return;
         }
 
@@ -72,5 +85,20 @@
 
         Snackbar.Add("Аккаунт создан! Войдите.", Severity.Success);
         Navigation.NavigateTo("/login");
+    }
+
+    private static string? CheckPasswordStrength(string password)
+    {
+        if (password.Length < 8)
+            return "Пароль должен содержать минимум 8 символов";
+        if (!password.Any(char.IsUpper))
+            return "Пароль должен содержать хотя бы одну заглавную букву";
+        if (!password.Any(char.IsLower))
+            return "Пароль должен содержать хотя бы одну строчную букву";
+        if (!password.Any(char.IsDigit))
+            return "Пароль должен содержать хотя бы одну цифру";
+        if (!password.Any(c => !char.IsLetterOrDigit(c)))
+            return "Пароль должен содержать хотя бы один спецсимвол";
+        return null;
     }
 }

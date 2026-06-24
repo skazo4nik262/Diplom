@@ -56,17 +56,21 @@ public class ReviewsController : ControllerBase
             return Ok(existing);
         }
 
-        var login = await _postgres.GetUserUsernameAsync(userId);
-        var review = new ReviewEntity
-        {
-            Id = Guid.NewGuid().ToString(),
-            MovieId = tmdbId,
-            Author = login,
-            AuthorRating = request.Rating,
-            Content = request.Content,
-            CreatedAt = DateTime.UtcNow,
-            Iso639_1 = "ru"
-        };
+            var user = await _postgres.GetUserByIdAsync(userId);
+            var login = user?.Login ?? "User";
+            var review = new ReviewEntity
+            {
+                Id = Guid.NewGuid().ToString(),
+                MovieId = tmdbId,
+                Author = login,
+                AuthorName = user?.Username ?? user?.Login,
+                AuthorUsername = user?.Login,
+                AuthorAvatarPath = user?.AvatarUrl,
+                AuthorRating = request.Rating,
+                Content = request.Content,
+                CreatedAt = DateTime.UtcNow,
+                Iso639_1 = "ru"
+            };
 
         await _postgres.AddReviewAsync(userId, tmdbId, review);
         await _postgres.RecordActivityAsync(userId, "review_written", tmdbId, review.Id);

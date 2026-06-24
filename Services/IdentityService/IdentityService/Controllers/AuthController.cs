@@ -55,7 +55,15 @@ namespace IdentityService.Controllers
                 return BadRequest(new { error = "Login must be at least 3 characters" });
 
             if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
-                return BadRequest(new { error = "Password must be at least 8 characters" });
+                return BadRequest(new { error = "Пароль должен содержать минимум 8 символов" });
+            if (!request.Password.Any(char.IsUpper))
+                return BadRequest(new { error = "Пароль должен содержать хотя бы одну заглавную букву" });
+            if (!request.Password.Any(char.IsLower))
+                return BadRequest(new { error = "Пароль должен содержать хотя бы одну строчную букву" });
+            if (!request.Password.Any(char.IsDigit))
+                return BadRequest(new { error = "Пароль должен содержать хотя бы одну цифру" });
+            if (!request.Password.Any(c => !char.IsLetterOrDigit(c)))
+                return BadRequest(new { error = "Пароль должен содержать хотя бы один спецсимвол" });
 
             try
             {
@@ -145,6 +153,71 @@ namespace IdentityService.Controllers
             if (user is null) return NotFound();
 
             return Ok(new ProfileResponse(user.Id, user.Login, user.Username, user.Bio, user.Birthday, user.AvatarUrl, user.Role));
+        }
+
+        [HttpPost("avatar")]
+        [RequestSizeLimit(10 * 1024 * 1024)]
+        public async Task<IActionResult> UploadAvatar(IFormFile file)
+        {
+            var userId = GetUserId();
+            if (userId == Guid.Empty) return Unauthorized(new { error = "Invalid token" });
+
+            if (file is null || file.Length == 0)
+                return BadRequest(new { error = "Файл не выбран" });
+
+            if (file.Length > 5 * 1024 * 1024)
+                return BadRequest(new { error = "Файл слишком большой. Максимальный размер — 5 МБ" });
+
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var allowedExtensions = new HashSet<string> { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+            if (!allowedExtensions.Contains(ext))
+                return BadRequest(new { error = "Недопустимый формат файла. Разрешены: jpg, png, gif, webp" });
+
+            var fileNameWithoutExt = Path.GetFileNameWithoutExtension(file.FileName);
+            if (fileNameWithoutExt.Contains('.') || fileNameWithoutExt.Contains(".."))
+                return BadRequest(new { error = "Недопустимое имя файла" });
+
+            var allowedMimeTypes = new HashSet<string>
+            {
+                "image/jpeg", "image/png", "image/gif", "image/webp"
+            };
+            if (!allowedMimeTypes.Contains(file.ContentType))
+                return BadRequest(new { error = "Недопустимый тип файла" });
+
+            using (var stream = file.OpenReadStream())
+            {
+                var header = new byte[12];
+                await stream.ReadExactlyAsync(header, 0, Math.Min(header.Length, (int)stream.Length));
+
+                var validMagic = (header.Take(4).SequenceEqual(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }) ||
+                                  header.Take(4).SequenceEqual(new byte[] { 0xFF, 0xD8, 0xFF, 0xE1 }) ||
+                                  header.Take(8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }) ||
+                                  header.Take(6).SequenceEqual(new byte[] { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61 }) ||
+                                  header.Take(6).SequenceEqual(new byte[] { 0x47, 0x49, 0x46, 0x38, 0x37, 0x61 }) ||
+                                  (header.Take(4).SequenceEqual(new byte[] { 0x52, 0x49, 0x46, 0x46 }) &&
+                                   header.Skip(8).Take(4).SequenceEqual(new byte[] { 0x57, 0x45, 0x42, 0x50 })));
+
+                if (!validMagic)
+                    return BadRequest(new { error = "Файл не является изображением" });
+            }
+
+            var avatarsDir = Path.Combine(Directory.GetCurrentDirectory(), "avatars");
+            Directory.CreateDirectory(avatarsDir);
+
+            var existingFiles = Directory.GetFiles(avatarsDir, $"{userId}.*");
+            foreach (var f in existingFiles)
+            {
+                try { System.IO.File.Delete(f); } catch { }
+            }
+
+            var filePath = Path.Combine(avatarsDir, $"{userId}{ext}");
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            var avatarUrl = $"/api/catalog/avatar/{userId}";
+            return Ok(new { url = avatarUrl });
         }
 
         [HttpPost("profile")]

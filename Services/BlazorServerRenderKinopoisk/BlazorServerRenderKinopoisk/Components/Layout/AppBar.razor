@@ -3,137 +3,176 @@
 @inject CatalogService Catalog
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
+@inject IConfiguration Configuration
+
+@using BlazorServerRenderKinopoisk.Components.Shared
 
 <div class="appbar">
-    <MudButton Variant="Variant.Text"
-               Class="home-active"
-               OnClick="@GoHome">
-        Главная
-    </MudButton>
-    <MudButton Variant="Variant.Text"
-               OnClick="@ShowPlaylists"
-               Class="mr-2 mr-lg-4">
-                Плейлисты
-    </MudButton>
-    <MudTextField @bind-Value="_searchQuery"
-                  T="string"
-                  Placeholder="Начните вводить название..."
-                  Immediate="true"
-                  Adornment="Adornment.End"
-                  AdornmentIcon="@Icons.Material.Filled.Search"
-                  Variant="Variant.Outlined"
-                  AdornmentColor="Color.Primary"
-                  OnKeyDown="@HandleSearchKeyDown"
-                  Class="search-field" />
-    <div class="smart-toggle">
-        <span class="smart-toggle-icon @(!_smartSearch ? "active" : "")">
-            <MudIcon Icon="@Icons.Material.Filled.Search" Size="@Size.Small" />
-        </span>
-        <label class="smart-switch">
-            <input type="checkbox" checked="@_smartSearch"
-                   @onchange="@((ChangeEventArgs e) => { _smartSearch = (bool)(e.Value ?? false); })" />
-            <span class="smart-slider"></span>
-        </label>
-        <span class="smart-toggle-icon @(_smartSearch ? "active" : "")">
-            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="@Size.Small" />
-        </span>
-    </div>
-    <MudMenu Class="notif-menu" Style="margin-right: 4px;">
-        <ActivatorContent>
-            <MudBadge Color="Color.Error" Content="_unreadCount"
-                      Visible="_unreadCount > 0" Max="99">
-                <MudIconButton Icon="@Icons.Material.Filled.Notifications"
-                               Size="@Size.Large" Color="@Color.Primary"
-                               @onclick="@context.ToggleAsync" />
-            </MudBadge>
-        </ActivatorContent>
-        <ChildContent>
-            <div style="padding: 8px 16px; display: flex; align-items: center; gap: 8px;">
-                <MudText Typo="Typo.body2" Color="Color.Primary">Уведомления</MudText>
-                @if (_unreadCount > 0)
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Error">@_unreadCount</MudChip>
-                }
-            </div>
-            <MudDivider />
-            @if (_notifications.Count == 0)
-            {
-                <MudText Class="px-4 py-2" Typo="Typo.body2" Style="opacity: 0.5; min-width: 250px;">
-                    Нет уведомлений
-                </MudText>
-            }
-            else
-            {
-                @foreach (var n in _notifications.Take(10))
-                {
-                    <MudMenuItem OnClick="() => MarkRead(n.Id)">
-                        <div style="opacity: @(n.IsRead ? 0.5 : 1); white-space: normal; max-width: 280px;">
-                            <MudText Typo="Typo.body2">@n.EventText</MudText>
-                            @if (n.Movie is not null)
-                            {
-                                <MudText Typo="Typo.caption">@n.Movie.Title</MudText>
-                            }
-                            <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 0.7rem;margin-left: 4px;">
-                                @n.CreatedAt.ToString("dd MMM HH:mm")
-                            </MudText>
-                        </div>
-                    </MudMenuItem>
-                }
-                @if (_unreadCount > 0)
-                {
-                    <MudDivider />
-                    <MudMenuItem OnClick="MarkAllRead">
-                        <MudText Typo="Typo.body2" Color="Color.Primary">
-                            Прочитать все (@_unreadCount)
-                        </MudText>
-                    </MudMenuItem>
-                }
-            }
-        </ChildContent>
-    </MudMenu>
-    <MudMenu Class="account-menu">
-        <ActivatorContent>
-            <MudIconButton Icon="@Icons.Material.Filled.AccountCircle"
+    <div class="appbar-left">
+        @if (TokenStore.IsAdmin)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.AdminPanelSettings"
                            Size="@Size.Large"
                            Color="@Color.Primary"
-                           OnClick="@context.ToggleAsync" />
-        </ActivatorContent>
-        <ChildContent>
-            @if (_profile is not null)
-            {
-                <MudText Class="px-4 py-2" Typo="Typo.body2" Color="Color.Primary">
-                    @(!string.IsNullOrEmpty(_profile.Username) ? _profile.Username : _profile.Login)
-                </MudText>
+                           OnClick="@GoToAdminMovies"
+                           Title="Админка" />
+        }
+        else
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Movie"
+                           Size="@Size.Large"
+                           Color="@Color.Primary"
+                           OnClick="@GoHome"
+                           Title="На главную" />
+        }
+    </div>
+    @if (!TokenStore.IsAdmin)
+    {
+        <div class="appbar-center">
+            <MudButton Variant="Variant.Text"
+                       Class="home-active"
+                       OnClick="@GoHome">
+                Главная
+            </MudButton>
+            <MudIconButton Icon="@Icons.Material.Filled.Search"
+                           Size="@Size.Large"
+                           Color="@Color.Primary"
+                           OnClick="@GoToSearch"
+                           Class="search-icon-btn"
+                           Title="Поиск" />
+            <MudIconButton Icon="@Icons.Material.Filled.Tune"
+                           Size="@Size.Large"
+                           Color="@Color.Primary"
+                           OnClick="@ToggleAppbarFilters"
+                           Title="Фильтры" />
+        </div>
+    }
+    <div class="appbar-right">
+        @if (!TokenStore.IsAdmin)
+        {
+            <MudMenu Class="notif-menu" Style="margin-right: 4px;">
+                <ActivatorContent>
+                    <MudBadge Color="Color.Error" Content="_unreadCount"
+                              Visible="_unreadCount > 0" Max="99">
+                        <MudIconButton Icon="@Icons.Material.Filled.Notifications"
+                                       Size="@Size.Large" Color="@Color.Primary"
+                                       @onclick="@context.ToggleAsync" />
+                    </MudBadge>
+                </ActivatorContent>
+            <ChildContent>
+                <div style="padding: 8px 16px; display: flex; align-items: center; gap: 8px;">
+                    <MudText Typo="Typo.body2" Color="Color.Primary">Уведомления</MudText>
+                    @if (_unreadCount > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error">@_unreadCount</MudChip>
+                    }
+                </div>
                 <MudDivider />
-            }
-            <MudMenuItem OnClick="@ShowProfile">Профиль</MudMenuItem>
-            <MudMenuItem OnClick="@ShowEditProfile">Редактировать профиль</MudMenuItem>
-            <MudMenuItem OnClick="@ShowPlaylists">Плейлисты</MudMenuItem>
-            <MudMenuItem OnClick="@ShowFriends">Друзья</MudMenuItem>
-            <MudMenuItem OnClick="@ShowDiary">Дневник</MudMenuItem>
-            @if (TokenStore.IsAdmin)
-            {
-                <MudMenuItem OnClick="@GoToAdmin">
-                    <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="@Size.Small" Class="mr-1" />
-                    Админка
+                @if (_notifications.Count == 0)
+                {
+                    <MudText Class="px-4 py-2" Typo="Typo.body2" Style="opacity: 0.5; min-width: 250px;">
+                        Нет уведомлений
+                    </MudText>
+                }
+                else
+                {
+                    @foreach (var n in _notifications.Take(10))
+                    {
+                        <MudMenuItem OnClick="() => MarkRead(n.Id)">
+                            <div style="opacity: @(n.IsRead ? 0.5 : 1); white-space: normal; max-width: 280px;">
+                                <MudText Typo="Typo.body2">@n.EventText</MudText>
+                                @if (n.Movie is not null)
+                                {
+                                    <MudText Typo="Typo.caption">@n.Movie.Title</MudText>
+                                }
+                                <MudText Typo="Typo.caption" Style="opacity: 0.5; font-size: 0.7rem;margin-left: 4px;">
+                                    @n.CreatedAt.ToString("dd MMM HH:mm")
+                                </MudText>
+                            </div>
+                        </MudMenuItem>
+                    }
+                    @if (_unreadCount > 0)
+                    {
+                        <MudDivider />
+                        <MudMenuItem OnClick="MarkAllRead">
+                            <MudText Typo="Typo.body2" Color="Color.Primary">
+                                Прочитать все (@_unreadCount)
+                            </MudText>
+                        </MudMenuItem>
+                    }
+                }
+            </ChildContent>
+        </MudMenu>
+        }
+        <MudMenu Class="account-menu">
+            <ActivatorContent>
+                @{
+                    var avatarUrl = _profile is not null && !string.IsNullOrEmpty(_profile.AvatarUrl)
+                        ? $"{Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net"}{_profile.AvatarUrl}"
+                        : null;
+                }
+                @if (avatarUrl is not null)
+                {
+                    <button class="appbar-avatar-btn" @onclick="@context.ToggleAsync">
+                        <div class="appbar-avatar" style="background-image: url('@avatarUrl')"></div>
+                    </button>
+                }
+                else
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.AccountCircle"
+                                   Size="@Size.Large"
+                                   Color="@Color.Primary"
+                                   OnClick="@context.ToggleAsync" />
+                }
+            </ActivatorContent>
+            <ChildContent>
+                @if (_profile is not null)
+                {
+                    <MudText Class="px-4 py-2" Typo="Typo.body2" Color="Color.Primary">
+                        @(!string.IsNullOrEmpty(_profile.Username) ? _profile.Username : _profile.Login)
+                    </MudText>
+                    <MudDivider />
+                }
+                @if (!TokenStore.IsAdmin)
+                {
+                    <MudMenuItem OnClick="@ShowProfile">Профиль</MudMenuItem>
+                    <MudMenuItem OnClick="@ShowEditProfile">Редактировать профиль</MudMenuItem>
+                    <MudMenuItem OnClick="@ShowPlaylists">Плейлисты</MudMenuItem>
+                    <MudMenuItem OnClick="@ShowFriends">Друзья</MudMenuItem>
+                    <MudMenuItem OnClick="@ShowDiary">Дневник</MudMenuItem>
+                }
+                @if (TokenStore.IsAdmin)
+                {
+                    <MudMenuItem OnClick="@GoToAdminMovies">
+                        <MudIcon Icon="@Icons.Material.Filled.Movie" Size="@Size.Small" Class="mr-1" />
+                        Фильмы
+                    </MudMenuItem>
+                    <MudMenuItem OnClick="@GoToAdminUsers">
+                        <MudIcon Icon="@Icons.Material.Filled.People" Size="@Size.Small" Class="mr-1" />
+                        Пользователи
+                    </MudMenuItem>
+                }
+                <MudDivider />
+                <MudMenuItem OnClick="@LogoutAsync">
+                    <MudIcon Icon="@Icons.Material.Filled.Logout" Size="@Size.Small" Class="mr-1" />
+                    Выйти
                 </MudMenuItem>
-            }
-            <MudDivider />
-            <MudMenuItem OnClick="@LogoutAsync">
-                <MudIcon Icon="@Icons.Material.Filled.Logout" Size="@Size.Small" Class="mr-1" />
-                Выйти
-            </MudMenuItem>
-        </ChildContent>
-    </MudMenu>
+            </ChildContent>
+        </MudMenu>
+    </div>
 </div>
 
+<FilterSheet Visible="@_showAppbarFilters"
+              OnApply="HandleAppbarFilterApply"
+              OnClose="CloseAppbarFilters" />
+
 @code {
-    private string? _searchQuery;
-    private bool _smartSearch;
     private ProfileResponse? _profile;
     private int _unreadCount;
     private List<NotificationItemDto> _notifications = [];
     private PeriodicTimer? _timer;
+
+    private bool _showAppbarFilters;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -171,12 +210,39 @@
     }
 
     private void GoHome() => Navigation.NavigateTo("/main");
+    private void GoToSearch() => Navigation.NavigateTo("/search");
     private void ShowProfile() => Navigation.NavigateTo("/profile");
     private void ShowEditProfile() => Navigation.NavigateTo("/profile/edit");
     private void ShowPlaylists() => Navigation.NavigateTo("/playlists");
     private void ShowFriends() => Navigation.NavigateTo("/friends");
     private void ShowDiary() => Navigation.NavigateTo("/diary");
-    private void GoToAdmin() => Navigation.NavigateTo("/admin/movies");
+    private void GoToAdminMovies() => Navigation.NavigateTo("/admin/movies");
+    private void GoToAdminUsers() => Navigation.NavigateTo("/admin/users");
+
+    private void ToggleAppbarFilters() => _showAppbarFilters = !_showAppbarFilters;
+    private void CloseAppbarFilters() => _showAppbarFilters = false;
+
+    private void HandleAppbarFilterApply(FilterSheet.FilterSheetResult result)
+    {
+        _showAppbarFilters = false;
+        var p = new List<string>();
+        if (result.GenreIds.Count > 0) p.Add($"GenreIds={string.Join(",", result.GenreIds)}");
+        if (result.YearFrom != 1900) p.Add($"yearFrom={result.YearFrom}");
+        if (result.YearTo != 2030) p.Add($"yearTo={result.YearTo}");
+        if (result.RatingFrom != 0) p.Add($"ratingFrom={result.RatingFrom:F1}");
+        if (result.RatingTo != 10) p.Add($"ratingTo={result.RatingTo:F1}");
+        if (result.RuntimeFrom != 0) p.Add($"runtimeFrom={result.RuntimeFrom}");
+        if (result.RuntimeTo != 600) p.Add($"runtimeTo={result.RuntimeTo}");
+        if (result.SelectedActor is not null) p.Add($"personId={result.SelectedActor.Id}");
+        if (result.CountryCodes.Count > 0) p.Add($"country={string.Join(",", result.CountryCodes)}");
+        if (!string.IsNullOrEmpty(result.SelectedSort) && result.SelectedSort != "без сортировки")
+        {
+            var (sortBy, sortOrder) = FilterSheet.SortMappings.GetValueOrDefault(result.SelectedSort, ("", "desc"));
+            if (!string.IsNullOrEmpty(sortBy)) p.Add($"sortBy={Uri.EscapeDataString(sortBy)}");
+            if (sortOrder != "desc") p.Add($"sortOrder={Uri.EscapeDataString(sortOrder)}");
+        }
+        Navigation.NavigateTo("/search" + (p.Count > 0 ? "?" + string.Join("&", p) : ""));
+    }
 
     private async Task MarkRead(Guid id)
     {
@@ -196,16 +262,5 @@
         await TokenStore.ClearAsync();
         _profile = null;
         Navigation.NavigateTo("/login");
-    }
-
-    private void HandleSearchKeyDown(KeyboardEventArgs args)
-    {
-        if (args.Key == "Enter" && !string.IsNullOrWhiteSpace(_searchQuery))
-        {
-            var url = $"/search?query={Uri.EscapeDataString(_searchQuery)}";
-            if (_smartSearch)
-                url += "&multimodal=true";
-            Navigation.NavigateTo(url);
-        }
     }
 }

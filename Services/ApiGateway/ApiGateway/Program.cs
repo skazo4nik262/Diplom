@@ -141,8 +141,15 @@ namespace ApiGateway
             },
             ClusterId = "catalog-cluster",
         },
-
-
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
+            RouteId = "catalog-avatar",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/catalog/avatar/{**catch-all}"
+            },
+            ClusterId = "catalog-cluster",
+        },
 
         // Открытый стриминг (ID фильма уже защищён аутентификацией при получении) \\
         new Yarp.ReverseProxy.Configuration.RouteConfig
@@ -165,6 +172,16 @@ namespace ApiGateway
         },
 
         // Защищённые маршруты \\
+        new Yarp.ReverseProxy.Configuration.RouteConfig
+        {
+            RouteId = "auth-avatar",
+            Match = new Yarp.ReverseProxy.Configuration.RouteMatch
+            {
+                Path = "/api/auth/avatar"
+            },
+            ClusterId = "identity-cluster",
+            AuthorizationPolicy = "Authenticated"
+        },
         new Yarp.ReverseProxy.Configuration.RouteConfig
         {
             RouteId = "auth-profile",

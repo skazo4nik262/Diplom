@@ -11,7 +11,12 @@
             <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-8">Вход</MudText>
 
             <MudTextField @bind-Value="login" Label="Логин" Variant="Variant.Outlined" Class="mb-4" />
-            <MudTextField @bind-Value="password" Label="Пароль" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-6" />
+            <MudTextField @bind-Value="password" Label="Пароль" Variant="Variant.Outlined"
+                         InputType="@(_showPassword ? InputType.Text : InputType.Password)" Class="mb-6"
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                         IconSize="Size.Small"
+                         OnAdornmentClick="@(() => _showPassword = !_showPassword)" />
 
             <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
                        Disabled="@isLoading" OnClick="@HandleLogin" Class="mb-4" Size="Size.Large">
@@ -33,6 +38,7 @@
     private string login = "";
     private string password = "";
     private bool isLoading;
+    private bool _showPassword;
 
     private async Task HandleLogin()
     {

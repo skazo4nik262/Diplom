@@ -19,10 +19,35 @@ namespace IdentityService
 
             builder.Services.AddControllers();
 
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;
+            });
+
             var app = builder.Build();
 
-            app.UseAuthorization();
+            var avatarsDir = Path.Combine(app.Environment.ContentRootPath, "avatars");
+            Directory.CreateDirectory(avatarsDir);
 
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(avatarsDir),
+                RequestPath = "/avatars",
+                ServeUnknownFileTypes = false,
+                ContentTypeProvider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider
+                {
+                    Mappings =
+                    {
+                        [".jpg"] = "image/jpeg",
+                        [".jpeg"] = "image/jpeg",
+                        [".png"] = "image/png",
+                        [".gif"] = "image/gif",
+                        [".webp"] = "image/webp",
+                    }
+                }
+            });
+
+            app.UseAuthorization();
 
             app.MapControllers();
 

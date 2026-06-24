@@ -1,5 +1,6 @@
 ﻿@inherits LayoutComponentBase
 @inject NavigationManager Navigation
+@inject TokenStore TokenStore
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
 <MudDialogProvider />
@@ -23,12 +24,37 @@
 
 @code {
     private bool _showAppBar = true;
+    private bool _initialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await TokenStore.LoadFromStorageAsync();
+        if (TokenStore.IsAdmin)
+        {
+            var uri = Navigation.Uri;
+            if (!uri.Contains("/admin/", StringComparison.OrdinalIgnoreCase))
+            {
+                Navigation.NavigateTo("/admin/movies", replace: true);
+                return;
+            }
+        }
+        _initialized = true;
+        _showAppBar = ShouldShowAppBar(Navigation.Uri);
+        StateHasChanged();
+    }
 
     protected override void OnParametersSet()
     {
-        var uri = Navigation.Uri;
-        _showAppBar = !uri.EndsWith("/login") && !uri.EndsWith("/login/")
-                    && !uri.EndsWith("/register") && !uri.EndsWith("/register/");
+        if (!_initialized) return;
+        _showAppBar = ShouldShowAppBar(Navigation.Uri);
+    }
+
+    private static bool ShouldShowAppBar(string uri)
+    {
+        return !uri.EndsWith("/login") && !uri.EndsWith("/login/")
+            && !uri.EndsWith("/register") && !uri.EndsWith("/register/")
+            && !uri.Contains("/search");
     }
 
     private MudTheme _theme = new()

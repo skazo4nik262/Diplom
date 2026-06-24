@@ -1,0 +1,340 @@
+@inject CatalogService Catalog
+
+@if (Visible)
+{
+    <div class="bottom-sheet-overlay" @onclick="() => { _showSortDropdown = false; _showGenreDropdown = false; _showCountryDropdown = false; OnClose.InvokeAsync(); }">
+        <div class="bottom-sheet" @onclick:stopPropagation>
+            <div class="bottom-sheet-header">
+                <span class="bottom-sheet-title">Фильтры</span>
+                <button class="bottom-sheet-close" @onclick="() => OnClose.InvokeAsync()">✕</button>
+            </div>
+            <div class="bottom-sheet-body">
+                <div class="filter-two-col">
+                    <div class="filter-col">
+                        <div class="filter-group">
+                            <label class="filter-label">Сортировка</label>
+                            <div class="multi-select-trigger" @onclick="() => _showSortDropdown = !_showSortDropdown">
+                                <span class="multi-select-placeholder">@_selectedSort</span>
+                                <span class="multi-select-arrow">▾</span>
+                            </div>
+                            @if (_showSortDropdown)
+                            {
+                                <div class="multi-select-dropdown">
+                                    @foreach (var s in SortOptions)
+                                    {
+                                        <label class="multi-select-item @(_selectedSort == s ? "selected" : "")"
+                                               @onclick="() => { _selectedSort = s; _showSortDropdown = false; }">
+                                            <span>@s</span>
+                                        </label>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="filter-group">
+                            <label class="filter-label">Актёр</label>
+                            <div class="actor-search-wrap">
+                                <input value="@_actorQuery"
+                                       @oninput="OnActorInput"
+                                       placeholder="Имя актёра..."
+                                       class="filter-text-input" />
+                                @if (_actorResults is not null && _actorResults.Count > 0)
+                                {
+                                    <div class="actor-dropdown">
+                                        @foreach (var actor in _actorResults)
+                                        {
+                                            <div class="actor-dropdown-item @(_selectedActor?.Id == actor.Id ? "selected" : "")"
+                                                 @onclick="() => SelectActor(actor)">
+                                                <div class="actor-dropdown-avatar" style="background-image: url('@actor.ProfileUrl')"></div>
+                                                <span>@actor.Name</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            @if (_selectedActor is not null)
+                            {
+                                <MudChip T="string" Class="mt-2" OnClose="@(() => { _selectedActor = null; _actorQuery = ""; })">
+                                    @_selectedActor.Name
+                                </MudChip>
+                            }
+                        </div>
+
+                        <div class="filter-group">
+                            <label class="filter-label">Год</label>
+                            <div class="filter-slider-header">
+                                <span class="filter-slider-values">@_yearFrom</span>
+                                <span class="filter-slider-values">@_yearTo</span>
+                            </div>
+                            <div class="range-slider">
+                                <input type="range" class="range-min" min="1900" max="2030" step="1"
+                                       @bind-value="_yearFrom" @bind-value:event="oninput" />
+                                <input type="range" class="range-max" min="1900" max="2030" step="1"
+                                       @bind-value="_yearTo" @bind-value:event="oninput" />
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label class="filter-label">Длительность</label>
+                            <div class="filter-slider-header">
+                                <span class="filter-slider-values">@FormatRuntime(_runtimeFrom)</span>
+                                <span class="filter-slider-values">@FormatRuntime(_runtimeTo)</span>
+                            </div>
+                            <div class="range-slider">
+                                <input type="range" class="range-min" min="0" max="600" step="10"
+                                       @bind-value="_runtimeFrom" @bind-value:event="oninput" />
+                                <input type="range" class="range-max" min="0" max="600" step="10"
+                                       @bind-value="_runtimeTo" @bind-value:event="oninput" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="filter-col">
+                        <div class="filter-group">
+                            <label class="filter-label">Жанры</label>
+                            <div class="multi-select-trigger" @onclick="() => _showGenreDropdown = !_showGenreDropdown">
+                                @if (_selectedGenreIds.Count == 0)
+                                {
+                                    <span class="multi-select-placeholder">Все жанры</span>
+                                }
+                                else
+                                {
+                                    <div class="chip-overflow">
+                                        @foreach (var g in _genres.Where(x => _selectedGenreIds.Contains(x.Id)).Take(3))
+                                        {
+                                            <span class="chip-overflow-item">@g.Name</span>
+                                        }
+                                        @if (_selectedGenreIds.Count > 3)
+                                        {
+                                            <span class="chip-overflow-more">+@(_selectedGenreIds.Count - 3)</span>
+                                        }
+                                    </div>
+                                }
+                                <span class="multi-select-arrow">▾</span>
+                            </div>
+                            @if (_showGenreDropdown)
+                            {
+                                <div class="multi-select-dropdown">
+                                    @foreach (var genre in _genres)
+                                    {
+                                        <label class="multi-select-item @(_selectedGenreIds.Contains(genre.Id) ? "selected" : "")">
+                                            <input type="checkbox"
+                                                   checked="@_selectedGenreIds.Contains(genre.Id)"
+                                                   @onchange="() => ToggleGenre(genre.Id)" />
+                                            <span>@genre.Name</span>
+                                        </label>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="filter-group">
+                            <label class="filter-label">Рейтинг</label>
+                            <div class="filter-slider-header">
+                                <span class="filter-slider-values">@_ratingFrom.ToString("F0")</span>
+                                <span class="filter-slider-values">@_ratingTo.ToString("F0")</span>
+                            </div>
+                            <div class="range-slider">
+                                <input type="range" class="range-min" min="0" max="10" step="1"
+                                       @bind-value="_ratingFrom" @bind-value:event="oninput" />
+                                <input type="range" class="range-max" min="0" max="10" step="1"
+                                       @bind-value="_ratingTo" @bind-value:event="oninput" />
+                            </div>
+                        </div>
+
+                        <div class="filter-group">
+                            <label class="filter-label">Страна</label>
+                            <div class="multi-select-trigger" @onclick="() => _showCountryDropdown = !_showCountryDropdown">
+                                @if (_selectedCountryCodes.Count == 0)
+                                {
+                                    <span class="multi-select-placeholder">Все страны</span>
+                                }
+                                else
+                                {
+                                    <div class="chip-overflow">
+                                        @foreach (var c in _countries.Where(x => _selectedCountryCodes.Contains(x.Iso3166_1)).Take(3))
+                                        {
+                                            <span class="chip-overflow-item">@c.Name</span>
+                                        }
+                                        @if (_selectedCountryCodes.Count > 3)
+                                        {
+                                            <span class="chip-overflow-more">+@(_selectedCountryCodes.Count - 3)</span>
+                                        }
+                                    </div>
+                                }
+                                <span class="multi-select-arrow">▾</span>
+                            </div>
+                            @if (_showCountryDropdown)
+                            {
+                                <div class="multi-select-dropdown">
+                                    @foreach (var c in _countries)
+                                    {
+                                        <label class="multi-select-item @(_selectedCountryCodes.Contains(c.Iso3166_1) ? "selected" : "")">
+                                            <input type="checkbox"
+                                                   checked="@_selectedCountryCodes.Contains(c.Iso3166_1)"
+                                                   @onchange="() => ToggleCountry(c.Iso3166_1)" />
+                                            <span>@c.Name</span>
+                                        </label>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bottom-sheet-footer">
+                <button class="btn-apply" @onclick="ApplyFilters">Применить</button>
+                <button class="btn-reset" @onclick="ResetFilters">Сбросить</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<FilterSheetResult> OnApply { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<GenreDto> _genres = [];
+    private List<ProductionCountryDto> _countries = [];
+    private HashSet<int> _selectedGenreIds = [];
+    private HashSet<string> _selectedCountryCodes = [];
+    private bool _showCountryDropdown;
+    private bool _showSortDropdown;
+    private int _yearFrom = 1900;
+    private int _yearTo = 2030;
+    private double _ratingFrom;
+    private double _ratingTo = 10;
+    private int _runtimeFrom;
+    private int _runtimeTo = 600;
+    private string _selectedSort = "без сортировки";
+    private string _actorQuery = "";
+    private List<PersonDto>? _actorResults;
+    private PersonDto? _selectedActor;
+    private bool _showGenreDropdown;
+    private CancellationTokenSource? _actorCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Visible && _genres.Count == 0)
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _genres = await Catalog.GetGenresAsync();
+        _countries = await Catalog.GetCountriesAsync();
+    }
+
+    private async Task ApplyFilters()
+    {
+        if (_genres.Count == 0) await LoadDataAsync();
+        _showGenreDropdown = false;
+        _showSortDropdown = false;
+        _showCountryDropdown = false;
+        await OnApply.InvokeAsync(new FilterSheetResult
+        {
+            GenreIds = [.. _selectedGenreIds],
+            YearFrom = _yearFrom,
+            YearTo = _yearTo,
+            RatingFrom = _ratingFrom,
+            RatingTo = _ratingTo,
+            RuntimeFrom = _runtimeFrom,
+            RuntimeTo = _runtimeTo,
+            SelectedSort = _selectedSort,
+            CountryCodes = [.. _selectedCountryCodes],
+            SelectedActor = _selectedActor,
+        });
+    }
+
+    private void ResetFilters()
+    {
+        _selectedGenreIds.Clear();
+        _yearFrom = 1900;
+        _yearTo = 2030;
+        _ratingFrom = 0;
+        _ratingTo = 10;
+        _runtimeFrom = 0;
+        _runtimeTo = 600;
+        _selectedSort = "без сортировки";
+        _selectedCountryCodes.Clear();
+        _selectedActor = null;
+        _actorQuery = "";
+        _showGenreDropdown = false;
+        _showCountryDropdown = false;
+        _showSortDropdown = false;
+    }
+
+    private void ToggleCountry(string iso)
+    {
+        if (!_selectedCountryCodes.Remove(iso))
+            _selectedCountryCodes.Add(iso);
+    }
+
+    internal static readonly Dictionary<string, (string sortBy, string sortOrder)> SortMappings = new()
+    {
+        ["сначала новые"] = ("year", "desc"),
+        ["сначала старые"] = ("year", "asc"),
+        ["без сортировки"] = ("", "desc"),
+        ["от А до Я"] = ("title", "asc"),
+        ["от Я до А"] = ("title", "desc"),
+    };
+
+    internal static readonly List<string> SortOptions = ["сначала новые", "сначала старые", "без сортировки", "от А до Я", "от Я до А"];
+
+    private void ToggleGenre(int id)
+    {
+        if (!_selectedGenreIds.Remove(id))
+            _selectedGenreIds.Add(id);
+    }
+
+    private async Task OnActorInput(ChangeEventArgs args)
+    {
+        _actorQuery = args.Value?.ToString() ?? "";
+        _actorCts?.Cancel();
+        _actorCts = new CancellationTokenSource();
+        var token = _actorCts.Token;
+        try
+        {
+            await Task.Delay(300, token);
+            if (token.IsCancellationRequested) return;
+            if (string.IsNullOrWhiteSpace(_actorQuery))
+                _actorResults = null;
+            else
+                _actorResults = await Catalog.SearchPeopleMultipleAsync(_actorQuery);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void SelectActor(PersonDto actor)
+    {
+        _selectedActor = actor;
+        _actorQuery = actor.Name ?? "";
+        _actorResults = null;
+    }
+
+    private static string FormatRuntime(int minutes)
+    {
+        if (minutes <= 0) return "0 мин";
+        if (minutes >= 600) return "600+ мин";
+        if (minutes >= 60) return $"{minutes / 60}ч {minutes % 60}м";
+        return $"{minutes} мин";
+    }
+
+    public class FilterSheetResult
+    {
+        public List<int> GenreIds { get; set; } = [];
+        public int YearFrom { get; set; } = 1900;
+        public int YearTo { get; set; } = 2030;
+        public double RatingFrom { get; set; }
+        public double RatingTo { get; set; } = 10;
+        public int RuntimeFrom { get; set; }
+        public int RuntimeTo { get; set; } = 600;
+        public string SelectedSort { get; set; } = "без сортировки";
+        public List<string> CountryCodes { get; set; } = [];
+        public PersonDto? SelectedActor { get; set; }
+    }
+}

@@ -13,7 +13,8 @@ namespace CatalogService.Services
         Task<List<MovieEntity>> GetMoviesBatchAsync(IEnumerable<int> tmdbIds);
         Task<List<MovieEntity>> SearchMoviesAsync(string query, int page, List<int>? genreIds = null,
             int? yearFrom = null, int? yearTo = null, double? ratingFrom = null, double? ratingTo = null,
-            int? runtimeFrom = null, int? runtimeTo = null, string? sortBy = null, string? sortOrder = null);
+            int? runtimeFrom = null, int? runtimeTo = null, string? sortBy = null, string? sortOrder = null,
+            int? personId = null, string? country = null);
         Task<List<MovieEntity>> SearchByImageAsync(string query, int page, CancellationToken ct = default);
         Task<List<MovieEntity>> GetPersonMoviesAsync(int personId, int page);
         Task<List<MovieEntity>> GetPopularMoviesAsync(int page);
@@ -25,6 +26,7 @@ namespace CatalogService.Services
         Task<PersonEntity?> GetPersonAsync(int personId);
         Task<List<GenreEntity>> GetGenresAsync();
         Task<List<GenreEntity>> GetPopularGenresAsync(int count = 10);
+        Task<List<ProductionCountryEntity>> GetCountriesAsync();
         Task<List<ProductionCompanyEntity>> GetCompaniesAsync();
         Task<List<MovieEntity>> GetRecommendationsAsync(Guid userId, int page, bool useImage = false);
         Task<List<MovieEntity>> GetUserTasteAsync(Guid userId, int page);
@@ -36,6 +38,7 @@ namespace CatalogService.Services
         Task<List<MovieEntity>> GetPlaylistSuggestionsAsync(int playlistId, int count = 5);
         Task<List<PersonEntity>> GetPeopleBatchAsync(IEnumerable<int> personIds);
         Task<PersonEntity?> SearchPersonAsync(string query);
+        Task<List<PersonEntity>> SearchPeopleMultipleAsync(string query, int limit = 10);
         Task<CollectionEntity?> GetCollectionAsync(int collectionId);
         Task<CollectionEntity?> GetMovieCollectionAsync(int tmdbId);
         Task<List<ReviewEntity>> GetMovieReviewsAsync(int tmdbId);

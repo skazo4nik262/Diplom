@@ -4,6 +4,8 @@
 @inject TokenStore TokenStore
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject IConfiguration Configuration
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex flex-column align-center mt-8">
     <MudCard Elevated Class="pa-8" Style="width: 100%; max-width: 500px;">
@@ -16,6 +18,24 @@
             }
             else
             {
+                <div class="d-flex flex-column align-center mb-6">
+                    <div class="avatar-preview" style="background-image: url('@_avatarPreview'); background-size: cover; background-position: center; width: 120px; height: 120px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.15); margin-bottom: 12px; @(_avatarPreview is null ? "background-color: #333;" : "")">
+                        @if (_avatarPreview is null)
+                        {
+                            <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; opacity: 0.3;">@GetInitials()</div>
+                        }
+                    </div>
+                    <label class="mud-button-root mud-button mud-button-filled mud-button-filled-primary mud-button-size-medium"
+                           style="cursor: pointer;">
+                        Загрузить аватарку
+                        <InputFile OnChange="@HandleFileSelected" accept=".jpg,.jpeg,.png,.gif,.webp" hidden />
+                    </label>
+                    @if (_uploadingAvatar)
+                    {
+                        <MudProgressCircular Indeterminate Size="Size.Small" Class="mt-2" />
+                    }
+                </div>
+
                 <MudTextField @bind-Value="_username" Label="Имя пользователя" Variant="Variant.Outlined" Class="mb-4" />
                 <MudTextField @bind-Value="_bio" Label="О себе" Variant="Variant.Outlined" Class="mb-4" Lines="4" />
                 <MudDatePicker @bind-Date="_birthday" Label="Дата рождения" Variant="Variant.Outlined" Class="mb-6" />
@@ -39,6 +59,9 @@
     private string _bio = "";
     private DateTime? _birthday;
     private bool _isLoading;
+    private string? _avatarPreview;
+    private string? _newAvatarUrl;
+    private bool _uploadingAvatar;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -57,8 +80,61 @@
             _username = _profile.Username ?? "";
             _bio = _profile.Bio ?? "";
             _birthday = _profile.Birthday;
+            if (!string.IsNullOrEmpty(_profile.AvatarUrl))
+            {
+                var apiBaseUrl = Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net";
+                _avatarPreview = $"{apiBaseUrl}{_profile.AvatarUrl}";
+            }
         }
         StateHasChanged();
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+        if (!allowedExtensions.Contains(ext))
+        {
+            Snackbar.Add("Недопустимый формат файла. Разрешены: jpg, png, gif, webp", Severity.Error);
+            return;
+        }
+
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            Snackbar.Add("Файл слишком большой. Максимум 5 МБ", Severity.Error);
+            return;
+        }
+
+        using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+        _uploadingAvatar = true;
+        StateHasChanged();
+
+        try
+        {
+            _newAvatarUrl = await AuthService.UploadAvatarAsync(stream, file.Name);
+
+            if (_newAvatarUrl is null)
+            {
+                Snackbar.Add("Ошибка загрузки аватарки", Severity.Error);
+                return;
+            }
+
+            var apiBaseUrl = Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net";
+            _avatarPreview = $"{apiBaseUrl}{_newAvatarUrl}";
+            Snackbar.Add("Аватарка загружена! Сохраните профиль", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Ошибка загрузки аватарки", Severity.Error);
+        }
+        finally
+        {
+            _uploadingAvatar = false;
+            StateHasChanged();
+        }
     }
 
     private async Task HandleSave()
@@ -69,7 +145,7 @@
             string.IsNullOrWhiteSpace(_username) ? null : _username,
             string.IsNullOrWhiteSpace(_bio) ? null : _bio,
             _birthday,
-            null);
+            _newAvatarUrl);
 
         _isLoading = false;
 
@@ -82,5 +158,11 @@
         _profile = result;
         Snackbar.Add("Профиль обновлён!", Severity.Success);
         Navigation.NavigateTo("/profile");
+    }
+
+    private string GetInitials()
+    {
+        var name = _profile?.Username ?? _profile?.Login ?? "";
+        return name.Length > 0 ? name[..1].ToUpper() : "?";
     }
 }

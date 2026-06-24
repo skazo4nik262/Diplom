@@ -18,6 +18,10 @@
             <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Size="@Size.Large" Color="@Color.Primary" OnClick="@context.ToggleAsync" />
         </ActivatorContent>
         <ChildContent>
+            <MudMenuItem OnClick="@GoToMovies">
+                <MudIcon Icon="@Icons.Material.Filled.Movie" Size="@Size.Small" Class="mr-2" />
+                Фильмы
+            </MudMenuItem>
             <MudMenuItem OnClick="@GoToUsers">
                 <MudIcon Icon="@Icons.Material.Filled.People" Size="@Size.Small" Class="mr-2" />
                 Пользователи
@@ -50,6 +54,7 @@
             Navigation.NavigateTo($"/admin/movies?query={Uri.EscapeDataString(_searchQuery)}");
     }
 
+    private void GoToMovies() => Navigation.NavigateTo("/admin/movies");
     private void GoToUsers() => Navigation.NavigateTo("/admin/users");
 
     private async Task LogoutAsync()

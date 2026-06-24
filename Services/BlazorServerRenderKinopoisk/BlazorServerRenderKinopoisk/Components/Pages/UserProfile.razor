@@ -4,6 +4,7 @@
 @inject AuthService AuthService
 @inject TokenStore TokenStore
 @inject NavigationManager Navigation
+@inject IConfiguration Configuration
 
 <div class="mt-4">
     @if (_loading)
@@ -21,7 +22,10 @@
     else
     {
         <div class="user-profile-header">
-            <div class="user-profile-avatar" style="background-image: url('@(_profile.AvatarUrl ?? "")')">
+            @{
+                var avatarDisplayUrl = string.IsNullOrEmpty(_profile.AvatarUrl) ? "" : $"{Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net"}{_profile.AvatarUrl}";
+            }
+            <div class="user-profile-avatar" style="background-image: url('@avatarDisplayUrl')">
                 @if (string.IsNullOrEmpty(_profile.AvatarUrl))
                 {
                     <span>@((_profile.Username ?? _profile.Login)[..1].ToUpper())</span>

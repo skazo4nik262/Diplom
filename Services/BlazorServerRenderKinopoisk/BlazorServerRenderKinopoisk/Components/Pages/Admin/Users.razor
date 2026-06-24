@@ -6,13 +6,17 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<div class="admin-page">
-    @if (!TokenStore.IsAdmin)
-    {
-        <MudText Typo="Typo.h5" Class="mt-8" Style="text-align: center; opacity: 0.5;">Доступ запрещён</MudText>
-        return;
-    }
-
+@if (!_isReady)
+{
+    <!-- wait for auth -->
+}
+else if (!TokenStore.IsAdmin)
+{
+    <MudText Typo="Typo.h5" Class="mt-8" Style="text-align: center; opacity: 0.5;">Доступ запрещён</MudText>
+}
+else
+{
+    <div class="admin-page">
     <div class="admin-users-search">
         <MudTextField @bind-Value="_searchQuery" T="string" Placeholder="Поиск пользователей..."
                       Immediate="true" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
@@ -80,8 +84,10 @@
         <MudText Typo="Typo.h6" Class="mt-4" Style="text-align: center; opacity: 0.5;">Пользователи не найдены</MudText>
     }
 </div>
+}
 
 @code {
+    private bool _isReady;
     private string _searchQuery = "";
     private List<UserBriefDto> _users = [];
     private HashSet<Guid> _actioningIds = [];
@@ -96,6 +102,8 @@
     {
         if (!firstRender) return;
         await TokenStore.LoadFromStorageAsync();
+        _isReady = true;
+        StateHasChanged();
         if (!TokenStore.IsAuthenticated)
         {
             Navigation.NavigateTo("/login");
@@ -134,6 +142,7 @@
         _users = await Auth.SearchUsersAsync(_searchQuery, includeInactive: true);
 
         _loading = false;
+        StateHasChanged();
     }
 
     private async Task ToggleBlock(UserBriefDto user)

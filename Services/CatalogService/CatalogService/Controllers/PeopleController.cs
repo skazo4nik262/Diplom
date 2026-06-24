@@ -53,4 +53,14 @@ public class PeopleController : ControllerBase
         var person = await _postgres.SearchPersonAsync(query);
         return Ok(person);
     }
+
+    [HttpGet("search-multiple")]
+    public async Task<IActionResult> SearchMultiple([FromQuery] string query, [FromQuery] int limit = 10)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return Ok(new List<object>());
+
+        var people = await _postgres.SearchPeopleMultipleAsync(query, limit);
+        return Ok(people);
+    }
 }

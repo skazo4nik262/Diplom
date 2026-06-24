@@ -44,6 +44,7 @@ public class TmdbDbContext : DbContext
             entity.ToTable("Movies");
             entity.HasKey(e => e.Id);
 
+            entity.Ignore(e => e.MatchPercentage);
             entity.Property(e => e.Title).IsUnicode().HasMaxLength(1000);
             entity.Property(e => e.OriginalTitle).IsUnicode().HasMaxLength(1000);
             entity.Property(e => e.Overview).IsUnicode();

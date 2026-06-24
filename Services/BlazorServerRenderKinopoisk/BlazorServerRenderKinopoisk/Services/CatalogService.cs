@@ -51,7 +51,8 @@ public class CatalogService
 
     public async Task<List<MovieDto>> SearchAsync(string query, int page = 1, string? genreIds = null,
         int? yearFrom = null, int? yearTo = null, double? ratingFrom = null, double? ratingTo = null,
-        int? runtimeFrom = null, int? runtimeTo = null, string? sortBy = null, string? sortOrder = null)
+        int? runtimeFrom = null, int? runtimeTo = null, string? sortBy = null, string? sortOrder = null,
+        int? personId = null, string? country = null)
     {
         try
         {
@@ -69,6 +70,8 @@ public class CatalogService
             if (runtimeTo.HasValue) request = request.SetQueryParam("runtimeTo", runtimeTo.Value);
             if (!string.IsNullOrEmpty(sortBy)) request = request.SetQueryParam("sortBy", sortBy);
             if (!string.IsNullOrEmpty(sortOrder)) request = request.SetQueryParam("sortOrder", sortOrder);
+            if (personId.HasValue) request = request.SetQueryParam("personId", personId.Value);
+            if (!string.IsNullOrEmpty(country)) request = request.SetQueryParam("country", country);
             return await request.GetJsonAsync<List<MovieDto>>();
         }
         catch (FlurlHttpException ex) when (ex.StatusCode == 503)
@@ -131,6 +134,23 @@ public class CatalogService
             return await _flurl.Request($"api/catalog/movies/{movieId}/similar")
                 .WithOAuthBearerToken(_tokenStore.Token ?? "")
                 .SetQueryParam("page", page)
+                .GetJsonAsync<List<MovieDto>>();
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { return []; }
+    }
+
+    public async Task<List<MovieDto>> GetSimilarByAtmosphereAsync(int movieId, int page = 1)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/movies/{movieId}/similar")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParams(new { page, useImage = true })
                 .GetJsonAsync<List<MovieDto>>();
         }
         catch (FlurlHttpException ex) when (ex.StatusCode == 401)
@@ -406,6 +426,19 @@ public class CatalogService
         catch { return null; }
     }
 
+    public async Task<List<PersonDto>> SearchPeopleMultipleAsync(string query, int limit = 10)
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/people/search-multiple")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .SetQueryParam("query", query)
+                .SetQueryParam("limit", limit)
+                .GetJsonAsync<List<PersonDto>>();
+        }
+        catch { return []; }
+    }
+
     // TMDB genres — fetched from backend
     public async Task<List<GenreDto>> GetGenresAsync()
     {
@@ -426,6 +459,17 @@ public class CatalogService
                 .WithOAuthBearerToken(_tokenStore.Token ?? "")
                 .SetQueryParam("count", count)
                 .GetJsonAsync<List<GenreDto>>();
+        }
+        catch { return []; }
+    }
+
+    public async Task<List<ProductionCountryDto>> GetCountriesAsync()
+    {
+        try
+        {
+            return await _flurl.Request("api/catalog/countries")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .GetJsonAsync<List<ProductionCountryDto>>();
         }
         catch { return []; }
     }
