@@ -1,149 +1,78 @@
-# Kinopoisk — микросервисный клон Кинопоиска
+# kinopoisk
 
-Самописный кино-каталог с метаданными TMDB, семантическим поиском (pgvector + embeddings),
-социальными функциями, стримингом через Jellyfin и Blazor Server фронтендом.
-
-## Архитектура
-
-```
-                          ┌─────────────┐
-                          │   Browser   │
-                          └──────┬──────┘
-                    ┌────────────┴────────────┐
-                    │                         │
-            localhost:5044              localhost:5000
-              blazor-web               api-gateway (YARP)
-           (SSR + прокси                    │
-            картинок/видео)     ┌────────────┼────────────┬──────────────┐
-                    │           │            │            │              │
-              identity:5001 jellyfin:5002 catalog:5003 admin:5009   internal
-              (auth/JWT)  (прокси HLS) (каталог)   (торренты)
-                    │            │            │              │
-                    └────────────┴───── postgres:5432 ──────┴──────────────┘
-                                     (pgvector/pg16, mydb)
-
-TMDB + image.tmdb.org ←── socks5://vless-proxy:1080 (sing-box, см. «Egress»)
-```
-
-Единственные публичные входы: `blazor-web :5044` (UI) и `api-gateway :5000` (API).
-Внутренний трафик между сервисами идёт напрямую по именам Docker-сети, мимо прокси
-(в коде `UseProxy=false` + `NO_PROXY`).
-
-## Сервисы
-
-| Сервис | Порт | Стек | Назначение |
-|---|---|---|---|
-| `blazor-web` | 5044 | .NET 9, Blazor Server, MudBlazor | SSR-фронт; проксирует картинки (`/api/catalog/poster`, `/avatar`) и видео (`/api/jellyfin/Media/...`) same-origin, чтобы браузеру не нужен был доступ во внутреннюю сеть |
-| `api-gateway` | 5000 | .NET, YARP | Единая точка входа API; JWT-валидация + сверка `tokenVersion` с Identity; прокидывает `X-User-Id`/`X-User-Role` downstream |
-| `identity-service` | 5001 | .NET 10, EF + Postgres | Регистрация/логин (BCrypt), JWT 15 мин + refresh 7 суток, профили, аватары, роли (`0=admin`), `TokenVersion` для инвалидации |
-| `catalog-service` | 5003 | .NET 10, EF + pgvector | Ядро: read-through каталог TMDB→Postgres, pgvector-поиск/рекомендации/настроение/поиск по картинке, плейлисты, дневник, отзывы, друзья, лента, уведомления, файлы фильмов |
-| `jellyfin-service` | 5002 | .NET 10 | Тонкий прокси HLS (`hls/{id}/{**}`) и прямого стрима (`stream/{id}`) к Jellyfin, проброс `Range` |
-| `admin-service` | 5009 | .NET 9 | Торренты через Transmission, сверка файлов с Jellyfin-библиотекой (`/media`), скан `POST /api/admin/movies/scan` |
-| `cache-image-service` | 5007 | .NET 9 | Файловый кэш постеров/аватаров (`D:/KinopoiskCacheImages`), отдача `File(bytes)` |
-| `embedding-service` | 5004 | .NET 10 | Текст→вектор (Ollama `nomic-embed-text`, 768d), картинка/текст→вектор (oCLIP `CLIP-ViT-B-32`, 512d) |
-| `DataParserToDB` | — | .NET 9, console | DDL-утилита: `EnsureCreated` схемы БД. Импорта данных сейчас не делает |
-
-Инфраструктура: `postgres` (pgvector/pg16, `:54320` наружу), `jellyfin :8096`,
-`transmission :9091`, `ollama` + `oclip :11435` (GPU), `vless-proxy :1080`, `vpn` + `vpn-proxy`.
-
-## Egress: VLESS + OpenVPN failover
-
-Внешний трафик (TMDB API, `image.tmdb.org`) нужен только `catalog-service` и
-`cache-image-service` — оба смотрят в `socks5://vless-proxy:1080`.
-
-- `vless-proxy` (sing-box): SOCKS `:1080`. Селектор `auto` (`urltest`, healthcheck
-  раз в минуту на `api.themoviedb.org/3/configuration`) выбирает живой egress:
-  `vless-out` (основной) → `gluetun-out` = `http://vpn:8888` (запасной).
-- `vpn` (свой образ `vpn-client/`: alpine + OpenVPN 2.7): поднимает туннель из
-  `vpn/VPNTYPE-AMS5.ovpn` (credentials inline в `<auth-user-pass>`, в compose
-  секретов нет). Healthcheck — наличие `tun0`.
-- `vpn-proxy` (`gost -L http://:8888`, `network_mode: service:vpn`): HTTP-прокси,
-  чей исходящий трафик идёт через туннель.
-
-Правила эксплуатации:
-
-- Положили `.ovpn` в `vpn/` (имя файла = `VPNTYPE-AMS5.ovpn`, см. volume в compose).
-  Каталог `vpn/` в `.gitignore` — секреты не коммитить.
-- Пересоздали `vpn` → **обязательно пересоздать и `vpn-proxy`**
-  (`up -d --force-recreate vpn-proxy`): он привязан к netns контейнера `vpn`.
-- Проверка: `docker logs vpn` → `Initialization Sequence Completed`;
-  `docker logs vless-proxy` → задержки обоих egress; TMDB через цепочку:
-  `curl -x socks5://localhost:1080 'https://api.themoviedb.org/3/configuration?api_key=...'`.
-- Известно: VLESS-сервер `tor4.vpntype.dev` сейчас мёртв (таймауты) — весь внешний
-  трафик идёт через OpenVPN. Это штатный режим failover, не авария.
-
-## Ключевые механики
-
-### Обновление данных фильма (TMDB → Postgres)
-- Первое открытие фильма: miss в БД → `GetMovieFullDetailsAsync` → `AddMovie` → возврат.
-- Дальше запись **заморожена**, автообновлений не было — добавлены:
-  - `MovieEntity.RefreshedAt` (колонка создаётся идемпотентно при старте CatalogService,
-    миграций нет — схема живёт через `EnsureCreated`);
-  - `POST /api/catalog/movies/{id}/refresh` — полный upsert: скаляры, коллекция,
-    M2M (жанры/компании/страны/языки/keywords с ru-названиями), замена 1-N
-    (cast/crew/videos/alt-titles/release-dates/images), докэширование постеров,
-    пересчёт эмбеддинга, проверка `new_in_collection`. Локальные отзывы/статусы не трогает.
-    404 — нет нигде, 503 — TMDB недоступен;
-  - stale-TTL в `GET /movies/{id}`: `RefreshedAt` пуст / старше 30 дней / обновление
-    было до даты релиза → молча refresh с fallback на кэш;
-  - кнопка «Обновить из TMDB» на карточке фильма в `/admin/movies` (только админ).
-- Пользовательская `MoviePage` кнопки не имеет сознательно (см. «Доступ»).
-
-### Картинки через Blazor
-`<img>` исполняет браузер, docker-DNS (`api-gateway:5000`) ему недоступен — поэтому
-DTO отдают относительные `/api/catalog/poster/...`, а `blazor-web` проксирует их
-(и `/api/catalog/avatar/{guid}`) внутрь сети через `HttpClient("catalog")`.
-Аватары резолвятся через `Services/AvatarHelper.Resolve` (`/api/...` как есть,
-чужие TMDB-аватары → инициалы).
-
-### Видео через Blazor
-Плеер (`hls.js`) ходит относительным `/api/jellyfin/Media/hls/{id}/master.m3u8` —
-`blazor-web` стрим-проксирует его и `/api/jellyfin/Media/stream/{id}` на gateway
-(`HttpClient("media")`, без таймаута, с пробросом query/`Range`/статуса/headers,
-без буферизации). Один origin сохраняется для будущего nginx+ddns.
-
-### Доступ: админ ≠ пользователь
-- `MainLayout` принудительно редиректит любой `IsAdmin` вне `/admin/` → `/admin/movies`.
-  Это by design, не баг: у админа своя админка (`AdminLayout`: `/admin/movies`, `/admin/users`).
-- JWT: `Issuer=IdentityService`, `Audience=JellyfinService`, роль в клейме (`0=admin`).
-  Gateway сверяет `tokenVersion` с Identity (кэш 5 мин) — после `deactivate/setRole`
-  старые токены умирают.
+Домашний клон кинопоиска. Каталог на TMDB, стриминг через Jellyfin, фронт — Blazor Server.
 
 ## Запуск
 
-Требования: Docker Desktop (WSL2-бэкенд, `/dev/net/tun` для `vpn`), `D:/Jellyfin`,
-`D:/Postgres`, `D:/KinopoiskCacheImages`, файл `vpn/VPNTYPE-AMS5.ovpn`, GPU для `oclip`
-(опционально).
+Нужны: Docker Desktop (WSL2), папки `D:/Jellyfin`, `D:/Postgres`, `D:/KinopoiskCacheImages`,
+файл `vpn/VPNTYPE-AMS5.ovpn` (иначе `vpn` не поднимется).
 
 ```powershell
-docker compose up -d --build        # всё
-docker compose up -d --build catalog-service blazor-web   # точечно
-docker compose logs -f vpn vless-proxy                    # egress
+docker compose up -d --build
 ```
 
-Blazor: `http://localhost:5044`, API: `http://localhost:5000`, Postgres: `localhost:54320`.
+- UI: http://localhost:5044
+- API: http://localhost:5000
+- Postgres: localhost:54320 (mydb / skazo4nik / qaz123wsx)
 
-## Структура репозитория
+## Что где
+
+| Сервис | Порт | За что отвечает |
+|---|---|---|
+| blazor-web | 5044 | Фронт. Заодно проксирует картинки и видео, чтобы браузер ходил в один origin |
+| api-gateway | 5000 | YARP, единственный вход в API. Проверяет JWT, прокидывает `X-User-Id` дальше |
+| identity-service | 5001 | Логин/регистрация, JWT (15 мин) + refresh (7 дней), роли (`0` — админ) |
+| catalog-service | 5003 | Весь каталог: TMDB→Postgres, поиск, рекомендации на pgvector, отзывы, плейлисты и т.д. |
+| jellyfin-service | 5002 | Прокси HLS/стрима к Jellyfin |
+| admin-service | 5009 | Торренты через Transmission, скан `/media` |
+| cache-image-service | 5007 | Кэш постеров на диске |
+| embedding-service | 5004 | Эмбеддинги: текст — Ollama, картинки — oCLIP |
+| DataParserToDB | — | Консольник, создаёт схему БД (`EnsureCreated`). Больше ничего не делает |
+
+Инфра: `postgres` (pgvector), `jellyfin` (8096), `transmission` (9091), `ollama`, `oclip` (11435, нужен GPU).
+
+## Наружу (важно)
+
+TMDB и картинки тянут только `catalog-service` и `cache-image-service` через
+`socks5://vless-proxy:1080`. Остальное наружу не ходит.
+
+- `vless-proxy` (sing-box) — SOCKS на 1080. Внутри `urltest`: healthcheck TMDB раз в минуту,
+  egress выбирается сам — `vless-out`, если мёртв — `gluetun-out` (`http://vpn:8888`).
+- `vpn` — свой образ `vpn-client/` (alpine + openvpn 2.7). Конфиг берётся из
+  `vpn/VPNTYPE-AMS5.ovpn` как есть, логин/пароль — инлайн-блок в нём же.
+  В compose секретов нет, каталог `vpn/` в `.gitignore`.
+- `vpn-proxy` — `gost` с `network_mode: service:vpn`, слушает 8888 внутри сети vpn.
+
+Запомнить:
+
+- VLESS (`tor4.vpntype.dev`) сейчас дохлый, всё идёт через OpenVPN. Это нормально.
+- Пересоздал `vpn` — пересоздай и `vpn-proxy` (`--force-recreate`), иначе он висит
+  на старом netns и прокси молча не работает.
+- Проверка: `docker logs vpn` → `Initialization Sequence Completed`;
+  `docker logs vless-proxy` → задержки обоих egress.
+
+## Неочевидное
+
+- Данные фильма в БД заморожены с момента первого импорта. Лечится само:
+  stale-TTL (нет `RefreshedAt` / старше 30 дней / обновлено до релиза) дёргает refresh
+  из TMDB при открытии страницы. Руками — `POST /movies/{id}/refresh` или кнопка
+  «Обновить из TMDB» на карточке в `/admin/movies`. `RefreshedAt` добавляется сам
+  при старте catalog-service, миграции не нужны.
+- Админ не может открыть `/movie/{id}` — так задумано, `MainLayout` шлёт всех админов
+  в `/admin/movies`. Метаданные правятся оттуда же.
+- Картинки/видео фронт отдаёт относительными URL и проксирует сам (`Program.cs`,
+  `MapGet`), потому что браузер docker-DNS не резолвит.
+- JWT: issuer `IdentityService`, audience `JellyfinService`. После смены роли/бана
+  старые токены дохнут по `tokenVersion` (сверка раз в 5 минут).
+- Blazor иногда виснет на JS-исключении, контейнер при этом жив — рестарт не лечит,
+  смотреть консоль браузера.
+
+## Раскладка
 
 ```
-docker-compose.yml          # все сервисы
-sing-box-config.json        # socks-in + vless-out/gluetun-out + urltest
-vpn/                        # (gitignored) VPNTYPE-AMS5.ovpn
-vpn-client/                 # Dockerfile + entrypoint для OpenVPN-туннеля
-Services/
-  ApiGateway/  IdentityService/  CatalogService/  JellyfinService/
-  AdminService/  CacheImageService/  EmbeddingService/
-  BlazorServerRenderKinopoisk/  DataParserToDB/
+docker-compose.yml   # всё
+sing-box-config.json # socks-in, vless-out, gluetun-out, urltest
+vpn/                 # VPNTYPE-AMS5.ovpn (не коммитить)
+vpn-client/          # Dockerfile + entrypoint для туннеля
+Services/...         # по папке на сервис, солюшены внутри
 ```
-
-## Troubleshooting
-
-| Симптом | Причина / лечение |
-|---|---|
-| `AUTH_FAILED` в `docker logs vpn` | Неверные credentials в инлайн-блоке `.ovpn`; заменить файл |
-| gluetun-стиль `host is not an IP address` | Не используется; свой `vpn-client` резолвит hostname штатно. Не возвращать gluetun без `vpn-dns`-костыля |
-| `vless-proxy` после рестарта `vpn` ходит в мёртвый egress | Пересоздать `vpn-proxy` (netns), подождать ~1 мин `urltest` |
-| `404 /api/jellyfin/Media/hls/...` из Blazor | Упал прокси-маппинг в `Blazor/Program.cs`; проверить `MapGet` |
-| Фильм с устаревшими данными (импорт до премьеры) | Открыть страницу (сработает stale-refresh) или кнопка в `/admin/movies` |
-| Админ «не может» открыть `/movie/{id}` | Так задумано (редирект в `MainLayout`); метаданные правятся из `/admin/movies` |
-| Blazor «виснет» на JS-исключении без падения | Circuit жив, рестарт контейнера не поможет — смотреть DevTools/browser-консоль, чинить JS-интероп |
