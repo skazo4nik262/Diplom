@@ -364,3 +364,4 @@ FodyWeavers.xsd
 
 # Local VPN credentials (never commit)
 vpn/
+sing-box-config*
