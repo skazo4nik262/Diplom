@@ -1,67 +1,71 @@
 # kinopoisk
 
-Домашний кинотеатр с каталогом: метаданные TMDB, семантический поиск,
-стриминг через Jellyfin, фронт на Blazor Server. Всё крутится в Docker Compose.
+Домашний кинотеатр в докере. Каталог тянет с TMDB, видео отдаёт Jellyfin,
+морда — Blazor Server.
 
-## Возможности
+## Запуск
 
-- Каталог фильмов/сериалов с TMDB (постеры, актёры, трейлеры, коллекции)
-- Поиск: текстовый, по фильтрам, по настроению, по картинке (CLIP), рекомендации (pgvector)
-- Социальное: рейтинги, статусы, избранное, плейлисты, дневник просмотров, друзья, лента, отзывы
-- Видео: HLS-стриминг из Jellyfin, автозагрузка торрентов через Transmission
-- Автообновление данных фильма из TMDB (stale-TTL + кнопка в админке)
-
-## Требования
-
-- Docker Desktop (для `vpn` нужен `/dev/net/tun`, на Linux работает из коробки)
-- TMDB API key — https://www.themoviedb.com/settings/api
-- ~10 ГБ под образы + место под медиа и кэш
-- Опционально: NVIDIA GPU (ускорение `oclip`), свой `.ovpn` для запасного egress
-
-## Быстрый старт
+Нужны Docker, ключ TMDB (https://www.themoviedb.com/settings/api) и место на диске.
+Без ключа каталог будет пустой, всё остальное заведётся.
 
 ```bash
 git clone <repo> && cd kinopoisk
 ```
 
-1. Создайте `sing-box-config.json` в корне (пример ниже) — egress для запросов к TMDB.
-2. Положите свой OpenVPN-конфиг в `vpn/` как `vpn/<имя>.ovpn` и поправьте путь
-   в volume сервиса `vpn` в `docker-compose.yml` (без VPN заведётся и так,
-   внешний трафик пойдёт только через VLESS).
-3. Отредактируйте `docker-compose.yml`: ключ `TMDB_API_KEY`, `Jellyfin__ApiKey`,
-   пароль Postgres, `Jwt__Key`, пути volume (`D:/...` → свои).
-4. Запуск:
+Дальше руками:
+
+1. `sing-box-config.json` в корне — его нет в репозитории (там были секреты),
+   соберите по примеру ниже. Это прокси для запросов к TMDB.
+2. В `docker-compose.yml` вбить своё: `TMDB_API_KEY`, `Jellyfin__ApiKey`,
+   пароль постгреса, `Jwt__Key` подлиннее, пути вместо `D:/...`.
+3. Если есть свой `.ovpn` — кинуть в `vpn/` и проверить путь в volume сервиса `vpn`.
+   Нету — не страшно, заведётся на одном VLESS (пока он жив).
 
 ```bash
 docker compose up -d --build
 ```
 
-- UI: http://localhost:5044 (первая страница — `/login`, создайте пользователя через `/register`;
-  админа выдайте через `/admin/users` — см. ниже)
-- API: http://localhost:5000
-- Postgres: localhost:54320
+UI — http://localhost:5044, API — http://localhost:5000.
+Первый пользователь — через `/register`. Админа себе выдать можно только
+напрямую в базе: таблица `Users`, поле `Role`, поставить `0`, перелогиниться.
 
-Как сделать себя админом: в таблице Identity `Users` поставьте `Role = 0`
-(роль хранится числом: `0` — админ, `1` — пользователь), перелогиньтесь.
-Админка: `/admin/movies` (торренты, обновление метаданных), `/admin/users`.
+## Что внутри
 
-## Конфигурация
+- `blazor-web` (5044) — фронт. Заодно проксирует картинки и видео, чтобы браузер
+  ходил в один origin и не знал про внутреннюю сеть докера.
+- `api-gateway` (5000) — YARP, вход в API. Проверяет JWT, дальше прокидывает
+  `X-User-Id`. Без токена пускает только логин/регистрацию, постеры и стрим.
+- `identity-service` (5001) — регистрация, логин, JWT на 15 минут + refresh на 7 дней.
+- `catalog-service` (5003) — всё остальное: каталог, поиск, рекомендации на pgvector,
+  отзывы, плейлисты, друзья и т.д.
+- `jellyfin-service` (5002) — прокси HLS/стрима к Jellyfin.
+- `admin-service` (5009) — торренты через Transmission, скан `/media`.
+- `cache-image-service` (5007) — кэш постеров на диске.
+- `embedding-service` (5004) — вектора: текст через Ollama, картинки через oCLIP.
+- Плюс `postgres` (pgvector), сам `jellyfin`, `transmission`, `ollama`, `oclip`.
 
-### `sing-box-config.json` (не коммитится, см. `.gitignore`)
+Про `DataParserToDB` — это просто создание схемы БД (`EnsureCreated`), не парсер,
+название историческое. Миграций в проекте нет.
 
-SOCKS `:1080` для всего внешнего трафика + `urltest`-failover между egress:
+## Наружу
+
+TMDB и картинки ходят через `socks5://vless-proxy:1080`, больше наружу никто не лазит
+(внутри сервисы общаются напрямую, в коде `UseProxy=false`).
+
+`vless-proxy` — sing-box. Внутри `urltest`: раз в минуту проверяет TMDB
+и сам выбирает через что идти — `vless-out` или запасной `http://vpn:8888`.
+Пример `sing-box-config.json`:
 
 ```json
 {
-  "log": { "level": "info" },
   "inbounds": [{ "type": "socks", "tag": "socks-in", "listen": "0.0.0.0", "listen_port": 1080 }],
   "outbounds": [
-    { "type": "vless", "tag": "vless-out", "...": "ваши параметры VLESS" },
+    { "type": "vless", "tag": "vless-out" },
     { "type": "http", "tag": "gluetun-out", "server": "vpn", "server_port": 8888 },
     {
       "type": "urltest", "tag": "auto",
       "outbounds": ["vless-out", "gluetun-out"],
-      "url": "https://api.themoviedb.org/3/configuration?api_key=ВАШ_TMDB_КЛЮЧ",
+      "url": "https://api.themoviedb.org/3/configuration?api_key=ВАШ_КЛЮЧ",
       "interval": "1m", "tolerance": 50
     }
   ],
@@ -69,56 +73,23 @@ SOCKS `:1080` для всего внешнего трафика + `urltest`-fail
 }
 ```
 
-### Переменные окружения (все — в `docker-compose.yml`)
+Запасной egress — связка `vpn` + `vpn-proxy`:
 
-| Переменная | Где | Зачем |
-|---|---|---|
-| `TMDB_API_KEY` | catalog-service | Ключ TMDB, без него каталог пустой |
-| `Jwt__Key` / `Jwt__Issuer` / `Jwt__Audience` | gateway, identity, catalog, jellyfin | Должны совпадать везде; ключ — от 32 символов |
-| `ConnectionStrings__*` | identity, catalog, jellyfin, admin | Строка Postgres (`Host=postgres;...` внутри сети) |
-| `Jellyfin__Url` / `Jellyfin__ApiKey` | jellyfin-service, admin-service | URL и API-ключ Jellyfin (ключи — в панели Jellyfin) |
-| `Transmission__*` | admin-service | URL/логин/пароль Transmission |
-| `EmbeddingService__Url`, `CacheImageService__Url` | catalog-service | Внутренние URL, обычно менять не надо |
-| `ApiClient__ApiUrl` | blazor-web | URL gateway, видимый **серверу** Blazor (в compose — `http://api-gateway:5000`) |
-| `VPN_AUTH` / `.ovpn` | vpn | Файл — в `vpn/`, секреты — только в нём, каталог в `.gitignore` |
+- `vpn` — свой образ `vpn-client/` (alpine + openvpn). Конфиг монтируется
+  из `vpn/`, логин/пароль — инлайн-блоком прямо в `.ovpn`, в compose секретов нет.
+- `vpn-proxy` — `gost` с `network_mode: service:vpn`, слушает 8888.
+  Его исходящий трафик идёт через туннель.
 
-Volume из compose (`D:/Jellyfin`, `D:/Postgres`, `D:/KinopoiskCacheImages`) замените
-на свои пути. Это единственное, что обязательно править под свою машину, кроме ключей.
+## На что наступить
 
-## Как устроено
-
-```
-browser → blazor-web:5044 (UI, SSR)
-browser → api-gateway:5000 → identity / catalog / jellyfin / admin
-catalog → postgres (pgvector), TMDB (через vless-proxy), embedding-service, cache-image-service
-admin → transmission, jellyfin, postgres
-```
-
-- **Каталог — read-through**: miss в Postgres → запрос в TMDB → запись в БД.
-  Дальше запись не трогается, пока не протухнет: `RefreshedAt` пуст / старше 30 дней /
-  обновление было до даты релиза → тихий refresh при открытии страницы.
-  Руками: `POST /api/catalog/movies/{id}/refresh` или кнопка в `/admin/movies`.
-- **Картинки и видео** фронт проксирует сам (`blazor-web`, `MapGet` в `Program.cs`),
-  поэтому браузеру достаточно одного origin, docker-DNS ему не нужен.
-- **Админ ≠ пользователь**: `MainLayout` шлёт всех админов в `/admin/movies`.
-  Обычные страницы (`/movie/{id}` и др.) — только для пользователей.
-- **БД без миграций**: схема создаётся через `EnsureCreated` (`DataParserToDB`,
-  `RefreshedAt` дотягивается SQL при старте catalog-service).
-
-## Раскладка
-
-```
-docker-compose.yml    # все сервисы и их env
-sing-box-config.json  # egress (создать самому, не коммитить)
-vpn/                  # ваш .ovpn (не коммитить)
-vpn-client/           # Dockerfile туннеля (alpine + openvpn)
-Services/
-  ApiGateway/ IdentityService/ CatalogService/ JellyfinService/
-  AdminService/ CacheImageService/ EmbeddingService/
-  BlazorServerRenderKinopoisk/ DataParserToDB/
-```
-
-## Известные грабли
-
-- Пересоздали `vpn` — пересоздайте и `vpn-proxy` (`--force-recreate`): он сидит
-  в netns контейнера `vpn` и после пересоздания смотрит в пустоту.
+- VLESS (`tor4.vpntype.dev`) на момент написания дохлый, всё идёт через OpenVPN.
+  Если чинить — менять `vless-out` в `sing-box-config.json`.
+- Пересоздали `vpn` — пересоздайте и `vpn-proxy` (`--force-recreate`).
+  Он живёт в чужом netns и после пересоздания смотрит в пустоту, молча.
+- Данные фильма в базе заморожены с первого импорта. Протухают через 30 дней
+  (или если импорт был до релиза) и тихо обновляются при открытии страницы.
+  Руками — кнопка «Обновить из TMDB» на карточке в `/admin/movies`.
+- Админ не может открыть `/movie/{id}` — его редиректит в `/admin/movies`.
+  Это специально, не баг.
+- Blazor иногда виснет на JS-ошибке при живом контейнере. Рестарт не помогает,
+  смотреть консоль браузера.
