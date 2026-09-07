@@ -110,6 +110,14 @@ else
                             <span>@movie.ReleaseYear</span>
                             <span class="admin-card-rating">@movie.RatingText</span>
                         </div>
+                        <div class="admin-card-download">
+                            <button class="admin-download-btn"
+                                    @onclick="() => RefreshMetadata(movie.Id)"
+                                    disabled="@_refreshingIds.Contains(movie.Id)"
+                                    title="Обновить метаданные из TMDB">
+                                @(_refreshingIds.Contains(movie.Id) ? "..." : "Обновить из TMDB")
+                            </button>
+                        </div>
                         @if (fileInfo is not null && fileInfo.IsReady)
                         {
                             <div class="admin-card-status status-ready">Готово</div>
@@ -169,6 +177,7 @@ else
     private List<MovieDto> _movies = [];
     private Dictionary<int, string> _magnetInputs = [];
     private HashSet<int> _sendingIds = [];
+    private HashSet<int> _refreshingIds = [];
     private Dictionary<int, MovieFileDto?> _fileCache = [];
     private bool _loading;
     private bool _loadingMore;
@@ -383,5 +392,40 @@ else
         }
 
         _sendingIds.Remove(movieId);
+    }
+
+    private async Task RefreshMetadata(int movieId)
+    {
+        if (_refreshingIds.Contains(movieId)) return;
+
+        _refreshingIds.Add(movieId);
+        StateHasChanged();
+
+        try
+        {
+            var movie = await Catalog.RefreshMovieAsync(movieId);
+            if (movie is null)
+            {
+                await JS.InvokeVoidAsync("showToast", "Не удалось обновить (TMDB недоступен)");
+                return;
+            }
+            var index = _movies.FindIndex(m => m.Id == movieId);
+            if (index >= 0) _movies[index] = movie;
+            await JS.InvokeVoidAsync("showToast", "Метаданные обновлены из TMDB");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        catch
+        {
+            await JS.InvokeVoidAsync("showToast", "Ошибка обновления");
+        }
+        finally
+        {
+            _refreshingIds.Remove(movieId);
+            StateHasChanged();
+        }
     }
 }

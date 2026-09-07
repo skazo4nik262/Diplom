@@ -57,7 +57,7 @@ public class MovieBriefDto
     [JsonPropertyName("releaseDate")] public DateTime? ReleaseDate { get; set; }
     [JsonPropertyName("voteAverage")] public double VoteAverage { get; set; }
     public string PosterUrl => PosterPath is not null
-        ? $"http://screeny.ddns.net/api/catalog/poster/w500{PosterPath}" : "";
+        ? $"/api/catalog/poster/w500{PosterPath}" : "";
     public string? ReleaseYear => ReleaseDate?.Year.ToString();
 }
 

@@ -23,6 +23,7 @@ public class MovieEntity
     public bool Video { get; set; }
     public double VoteAverage { get; set; }
     public int VoteCount { get; set; }
+    public DateTime? RefreshedAt { get; set; }
 
     public CollectionEntity? Collection { get; set; }
     public ExternalIdsEntity? ExternalIds { get; set; }

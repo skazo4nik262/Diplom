@@ -5,7 +5,7 @@
 @inject CatalogService Catalog
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
-@inject IConfiguration Configuration
+@using BlazorServerRenderKinopoisk.Services
 
 <div class="mt-4 page-fade-in">
     @if (_movie is null)
@@ -476,8 +476,7 @@
                             <div class="review-card" id="review-@review.Id">
                                 <div class="review-header">
                                     @{
-                                        var reviewAvatarUrl = string.IsNullOrEmpty(review.AuthorAvatarPath) ? null
-                                            : $"{Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net"}{review.AuthorAvatarPath}";
+                                        var reviewAvatarUrl = AvatarHelper.Resolve(review.AuthorAvatarPath);
                                     }
                                     @if (reviewAvatarUrl is not null)
                                     {

@@ -77,6 +77,8 @@ namespace CatalogService.Services
 
         #region Update
         Task UpdateMovie(Movie movie, int tmdbId);
+        Task<MovieEntity?> RefreshMovieAsync(int tmdbId);
+        bool IsStale(MovieEntity movie);
         Task AttachKeywordsAsync(int tmdbId, List<TMDbLib.Objects.General.Keyword> keywords);
         Task UpdatePerson(Person person, int personId);
         Task UpdateCollection(CollectionEntity collection);

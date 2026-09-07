@@ -9,7 +9,7 @@ namespace CatalogService
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             Environment.SetEnvironmentVariable("PG_GSSENCMODE", "disable");
             var builder = WebApplication.CreateBuilder(args);
@@ -48,6 +48,16 @@ namespace CatalogService
 
             var app = builder.Build();
 
+            using (var scope = app.Services.CreateScope())
+            {
+                try
+                {
+                    var db = scope.ServiceProvider.GetRequiredService<TmdbDbContext>();
+                    await db.Database.ExecuteSqlRawAsync(
+                        "ALTER TABLE \"Movies\" ADD COLUMN IF NOT EXISTS \"RefreshedAt\" timestamptz NULL");
+                }
+                catch { }
+            }
 
             app.UseAuthorization();
 

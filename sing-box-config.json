@@ -29,6 +29,23 @@
           "short_id": "" 
         }
       }
+    },
+    {
+      "type": "http",
+      "tag": "gluetun-out",
+      "server": "vpn",
+      "server_port": 8888
+    },
+    {
+      "type": "urltest",
+      "tag": "auto",
+      "outbounds": ["vless-out", "gluetun-out"],
+      "url": "https://api.themoviedb.org/3/configuration?api_key=76ac486e8244a34f77259b927d1852e5",
+      "interval": "1m",
+      "tolerance": 50
     }
-  ]
+  ],
+  "route": {
+    "final": "auto"
+  }
 }

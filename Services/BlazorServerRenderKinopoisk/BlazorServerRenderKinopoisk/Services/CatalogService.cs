@@ -127,6 +127,23 @@ public class CatalogService
         catch { return null; }
     }
 
+    public async Task<MovieDto?> RefreshMovieAsync(int id)
+    {
+        try
+        {
+            return await _flurl.Request($"api/catalog/movies/{id}/refresh")
+                .WithOAuthBearerToken(_tokenStore.Token ?? "")
+                .PostAsync()
+                .ReceiveJson<MovieDto>();
+        }
+        catch (FlurlHttpException ex) when (ex.StatusCode == 401)
+        {
+            await _tokenStore.ClearAsync();
+            throw new UnauthorizedAccessException("Token expired or invalid");
+        }
+        catch { return null; }
+    }
+
     public async Task<List<MovieDto>> GetSimilarAsync(int movieId, int page = 1)
     {
         try

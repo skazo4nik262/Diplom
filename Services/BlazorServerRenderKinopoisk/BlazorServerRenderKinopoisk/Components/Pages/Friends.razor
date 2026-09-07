@@ -3,7 +3,7 @@
 @inject CatalogService Catalog
 @inject AuthService AuthService
 @inject NavigationManager Navigation
-@inject IConfiguration Configuration
+@using BlazorServerRenderKinopoisk.Services
 
 <div class="mt-4">
     <MudText Typo="Typo.h5" Class="mb-4">Друзья</MudText>
@@ -175,8 +175,6 @@
 
     private string AvatarUrl(UserBriefDto user)
     {
-        if (string.IsNullOrEmpty(user.AvatarUrl)) return "";
-        var baseUrl = Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net";
-        return $"{baseUrl}{user.AvatarUrl}";
+        return AvatarHelper.Resolve(user.AvatarUrl) ?? "";
     }
 }

@@ -3,9 +3,9 @@
 @inject CatalogService Catalog
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
-@inject IConfiguration Configuration
 
 @using BlazorServerRenderKinopoisk.Components.Shared
+@using BlazorServerRenderKinopoisk.Services
 
 <div class="appbar">
     <div class="appbar-left">
@@ -107,8 +107,8 @@
         <MudMenu Class="account-menu">
             <ActivatorContent>
                 @{
-                    var avatarUrl = _profile is not null && !string.IsNullOrEmpty(_profile.AvatarUrl)
-                        ? $"{Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net"}{_profile.AvatarUrl}"
+                    var avatarUrl = _profile is not null
+                        ? AvatarHelper.Resolve(_profile.AvatarUrl)
                         : null;
                 }
                 @if (avatarUrl is not null)

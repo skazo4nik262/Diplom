@@ -5,7 +5,7 @@
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
-@inject IConfiguration Configuration
+@using BlazorServerRenderKinopoisk.Services
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex flex-column align-center mt-8">
     <MudCard Elevated Class="pa-8" Style="width: 100%; max-width: 500px;">
@@ -82,8 +82,7 @@
             _birthday = _profile.Birthday;
             if (!string.IsNullOrEmpty(_profile.AvatarUrl))
             {
-                var apiBaseUrl = Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net";
-                _avatarPreview = $"{apiBaseUrl}{_profile.AvatarUrl}";
+                _avatarPreview = AvatarHelper.Resolve(_profile.AvatarUrl);
             }
         }
         StateHasChanged();
@@ -122,8 +121,7 @@
                 return;
             }
 
-            var apiBaseUrl = Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net";
-            _avatarPreview = $"{apiBaseUrl}{_newAvatarUrl}";
+            _avatarPreview = AvatarHelper.Resolve(_newAvatarUrl);
             Snackbar.Add("Аватарка загружена! Сохраните профиль", Severity.Success);
         }
         catch

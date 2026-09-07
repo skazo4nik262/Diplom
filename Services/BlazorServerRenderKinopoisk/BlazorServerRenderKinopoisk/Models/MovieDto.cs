@@ -31,7 +31,7 @@ namespace BlazorServerRenderKinopoisk.Models
         [JsonPropertyName("matchPercentage")] public double? MatchPercentage { get; set; }
 
         public string PosterUrl => PosterPath is not null
-            ? $"http://screeny.ddns.net/api/catalog/poster/w500{PosterPath}" : "";
+            ? $"/api/catalog/poster/w500{PosterPath}" : "";
         public string RatingText => $"{VoteAverage:F1}";
         public string ReleaseYear => ReleaseDate?.Year.ToString() ?? "";
         public string AgeRating => ReleaseDates?
@@ -70,7 +70,7 @@ namespace BlazorServerRenderKinopoisk.Models
         [JsonPropertyName("order")] public int Order { get; set; }
 
         public string ProfileUrl => ProfilePath is not null
-            ? $"http://screeny.ddns.net/api/catalog/poster/w185{ProfilePath}" : "";
+            ? $"/api/catalog/poster/w185{ProfilePath}" : "";
     }
 
     public class CrewDto
@@ -92,7 +92,7 @@ namespace BlazorServerRenderKinopoisk.Models
         [JsonPropertyName("movies")] public List<MovieDto>? Movies { get; set; }
 
         public string PosterUrl => PosterPath is not null
-            ? $"http://screeny.ddns.net/api/catalog/poster/w500{PosterPath}" : "";
+            ? $"/api/catalog/poster/w500{PosterPath}" : "";
     }
 
     public class PersonDto
@@ -110,7 +110,7 @@ namespace BlazorServerRenderKinopoisk.Models
         [JsonPropertyName("externalIds")] public ExternalIdsDto? ExternalIds { get; set; }
 
         public string ProfileUrl => ProfilePath is not null
-            ? $"http://screeny.ddns.net/api/catalog/poster/w500{ProfilePath}" : "";
+            ? $"/api/catalog/poster/w500{ProfilePath}" : "";
         public string BirthYear => Birthday?.Year.ToString() ?? "";
         public bool IsDead => Deathday is not null;
     }
@@ -194,6 +194,6 @@ public class ReviewDto
         [JsonPropertyName("type")] public string? Type { get; set; }
 
         public string ImageUrl => FilePath is not null
-            ? $"http://screeny.ddns.net/api/catalog/poster/original{FilePath}" : "";
+            ? $"/api/catalog/poster/original{FilePath}" : "";
     }
 }

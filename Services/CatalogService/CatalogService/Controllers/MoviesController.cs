@@ -31,6 +31,15 @@ public class MoviesController : ControllerBase
         var movie = await _postgres.GetMovieWithDetailsAsync(tmdbId);
         if (movie is not null)
         {
+            if (_postgres.IsStale(movie))
+            {
+                try
+                {
+                    var refreshed = await _postgres.RefreshMovieAsync(tmdbId);
+                    if (refreshed is not null) movie = refreshed;
+                }
+                catch { }
+            }
             if (movie.Keywords is null || movie.Keywords.Count == 0)
                 await TryAttachKeywordsAsync(tmdbId);
             return Ok(movie);
@@ -42,6 +51,26 @@ public class MoviesController : ControllerBase
         await _postgres.AddMovie(tmdbMovie);
         movie = await _postgres.GetMovieWithDetailsAsync(tmdbId);
         return Ok(movie);
+    }
+
+    [HttpPost("{tmdbId:int}/refresh")]
+    public async Task<IActionResult> RefreshMovie(int tmdbId)
+    {
+        try
+        {
+            var movie = await _postgres.RefreshMovieAsync(tmdbId);
+            if (movie is null)
+            {
+                var existing = await _postgres.GetMovieWithDetailsAsync(tmdbId);
+                if (existing is null) return NotFound();
+                return Ok(existing);
+            }
+            return Ok(movie);
+        }
+        catch
+        {
+            return StatusCode(503, "TMDB unavailable");
+        }
     }
 
     private async Task TryAttachKeywordsAsync(int tmdbId)

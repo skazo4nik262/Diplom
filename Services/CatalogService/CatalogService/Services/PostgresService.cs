@@ -250,6 +250,7 @@ namespace CatalogService.Services
 
             var entity = movie.ToEntity();
             entity.ReleaseDate = NormalizeUtc(entity.ReleaseDate);
+            entity.RefreshedAt = DateTime.UtcNow;
 
             if (entity.Collection is not null)
             {
@@ -1326,6 +1327,176 @@ namespace CatalogService.Services
             existing.OriginalTitle = movie.OriginalTitle;
 
             await _db.SaveChangesAsync();
+        }
+
+        private const int RefreshTtlDays = 30;
+
+        public bool IsStale(MovieEntity movie)
+        {
+            var now = DateTime.UtcNow;
+            if (movie.RefreshedAt is null) return true;
+            if (movie.RefreshedAt < now.AddDays(-RefreshTtlDays)) return true;
+            if (movie.ReleaseDate.HasValue)
+            {
+                var release = movie.ReleaseDate.Value.Kind == DateTimeKind.Utc
+                    ? movie.ReleaseDate.Value
+                    : DateTime.SpecifyKind(movie.ReleaseDate.Value, DateTimeKind.Utc);
+                if (release <= now && movie.RefreshedAt < release) return true;
+            }
+            return false;
+        }
+
+        public async Task<MovieEntity?> RefreshMovieAsync(int tmdbId)
+        {
+            var fresh = await _tmdb.GetMovieFullDetailsAsync(tmdbId);
+            if (fresh is null) return null;
+
+            if (!await _db.Movies.AnyAsync(m => m.Id == tmdbId))
+            {
+                await AddMovie(fresh);
+                return await GetMovieWithDetailsAsync(tmdbId);
+            }
+
+            var entity = await _db.Movies
+                .Include(m => m.Collection)
+                .Include(m => m.Genres)
+                .Include(m => m.ProductionCompanies)
+                .Include(m => m.ProductionCountries)
+                .Include(m => m.SpokenLanguages)
+                .Include(m => m.Keywords)
+                .Include(m => m.Cast)
+                .Include(m => m.Crew)
+                .Include(m => m.Videos)
+                .Include(m => m.AlternativeTitles)
+                .Include(m => m.ReleaseDates)
+                .Include(m => m.Images)
+                .FirstAsync(m => m.Id == tmdbId);
+
+            entity.Title = fresh.Title;
+            entity.Overview = fresh.Overview;
+            entity.Tagline = fresh.Tagline;
+            entity.PosterPath = fresh.PosterPath;
+            entity.BackdropPath = fresh.BackdropPath;
+            entity.ReleaseDate = NormalizeUtc(fresh.ReleaseDate);
+            entity.Runtime = fresh.Runtime;
+            entity.VoteAverage = fresh.VoteAverage;
+            entity.VoteCount = fresh.VoteCount;
+            entity.Popularity = fresh.Popularity;
+            entity.Budget = fresh.Budget;
+            entity.Revenue = fresh.Revenue;
+            entity.Homepage = fresh.Homepage;
+            entity.ImdbId = fresh.ImdbId;
+            entity.Status = fresh.Status;
+            entity.Adult = fresh.Adult;
+            entity.Video = fresh.Video;
+            entity.OriginalLanguage = fresh.OriginalLanguage;
+            entity.OriginalTitle = fresh.OriginalTitle;
+            entity.RefreshedAt = DateTime.UtcNow;
+
+            if (fresh.BelongsToCollection is null)
+            {
+                entity.Collection = null;
+                entity.BelongsToCollectionId = null;
+            }
+            else
+            {
+                var col = await _db.Collections.FindAsync(fresh.BelongsToCollection.Id);
+                if (col is null)
+                {
+                    col = fresh.BelongsToCollection.ToEntity();
+                    _db.Collections.Add(col);
+                }
+                else
+                {
+                    col.Name = fresh.BelongsToCollection.Name;
+                    col.Overview = fresh.BelongsToCollection.Overview;
+                    col.PosterPath = fresh.BelongsToCollection.PosterPath;
+                    col.BackdropPath = fresh.BelongsToCollection.BackdropPath;
+                }
+                entity.Collection = col;
+                entity.BelongsToCollectionId = col.Id;
+            }
+
+            entity.Genres.Clear();
+            foreach (var genre in fresh.Genres ?? new List<Genre>())
+            {
+                var g = await _db.Genres.FindAsync(genre.Id);
+                entity.Genres.Add(g ?? genre.ToEntity());
+            }
+
+            entity.ProductionCompanies.Clear();
+            foreach (var company in fresh.ProductionCompanies ?? new List<ProductionCompany>())
+            {
+                var c = await _db.ProductionCompanies.FindAsync(company.Id);
+                entity.ProductionCompanies.Add(c ?? company.ToEntity());
+            }
+
+            entity.ProductionCountries.Clear();
+            foreach (var country in fresh.ProductionCountries ?? new List<ProductionCountry>())
+            {
+                var c = await _db.ProductionCountries.FindAsync(country.Iso_3166_1);
+                entity.ProductionCountries.Add(c ?? country.ToEntity());
+            }
+
+            entity.SpokenLanguages.Clear();
+            foreach (var lang in fresh.SpokenLanguages ?? new List<SpokenLanguage>())
+            {
+                var l = await _db.SpokenLanguages.FindAsync(lang.Iso_639_1);
+                entity.SpokenLanguages.Add(l ?? lang.ToEntity());
+            }
+
+            entity.Keywords.Clear();
+            foreach (var keyword in fresh.Keywords?.Keywords ?? new List<Keyword>())
+                entity.Keywords.Add(await GetOrCreateKeywordAsync(keyword));
+
+            _db.MovieCast.RemoveRange(entity.Cast);
+            _db.MovieCrew.RemoveRange(entity.Crew);
+            _db.Videos.RemoveRange(entity.Videos);
+            _db.AlternativeTitles.RemoveRange(entity.AlternativeTitles);
+            _db.ReleaseDates.RemoveRange(entity.ReleaseDates);
+            _db.Images.RemoveRange(entity.Images);
+
+            foreach (var p in fresh.ToPersonEntities())
+            {
+                if (await _db.People.FindAsync(p.Id) is null) _db.People.Add(p);
+            }
+
+            entity.Cast = fresh.ToCastEntities();
+            entity.Crew = fresh.ToCrewEntities();
+            entity.Videos = fresh.ToVideoEntities();
+            entity.AlternativeTitles = fresh.ToAlternativeTitleEntities();
+            entity.ReleaseDates = fresh.ToReleaseDateEntities();
+            entity.Images = fresh.ToImageEntities();
+
+            await _db.SaveChangesAsync();
+
+            _ = CacheMovieImagesAsync(entity);
+            try
+            {
+                _db.MovieEmbeddings.RemoveRange(_db.MovieEmbeddings.Where(e => e.MovieId == tmdbId));
+                await _db.SaveChangesAsync();
+                await EnsureEmbeddingsAsync(tmdbId);
+            }
+            catch { }
+            await CheckNewCollectionMovieForMovieAsync(tmdbId);
+
+            return await GetMovieWithDetailsAsync(tmdbId);
+        }
+
+        private async Task<KeywordEntity> GetOrCreateKeywordAsync(Keyword keyword)
+        {
+            var k = await _db.Keywords.FindAsync(keyword.Id);
+            if (k is not null) return k;
+            k = keyword.ToEntity();
+            _db.Keywords.Add(k);
+            try
+            {
+                var ru = await _tmdb.GetKeywordAsync(keyword.Id);
+                if (ru?.Name is not null && ru.Name != keyword.Name)
+                    k.NameRu = ru.Name;
+            }
+            catch { }
+            return k;
         }
 
         public async Task UpdatePerson(Person person, int personId)

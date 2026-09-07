@@ -4,7 +4,7 @@
 @inject AuthService AuthService
 @inject TokenStore TokenStore
 @inject NavigationManager Navigation
-@inject IConfiguration Configuration
+@using BlazorServerRenderKinopoisk.Services
 
 <div class="mt-4">
     @if (_loading)
@@ -23,7 +23,7 @@
     {
         <div class="user-profile-header">
             @{
-                var avatarDisplayUrl = string.IsNullOrEmpty(_profile.AvatarUrl) ? "" : $"{Configuration["ApiClient:ApiUrl"]?.TrimEnd('/') ?? "http://screeny.ddns.net"}{_profile.AvatarUrl}";
+                var avatarDisplayUrl = AvatarHelper.Resolve(_profile.AvatarUrl) ?? "";
             }
             <div class="user-profile-avatar" style="background-image: url('@avatarDisplayUrl')">
                 @if (string.IsNullOrEmpty(_profile.AvatarUrl))

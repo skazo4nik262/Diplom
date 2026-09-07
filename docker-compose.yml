@@ -1,5 +1,31 @@
 version: '3.8'
 services:
+  vpn:
+    build: ./vpn-client
+    container_name: vpn
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - ./vpn/VPNTYPE-AMS5.ovpn:/vpn/vpn.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -d /sys/class/net/tun0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+#----------------------------------------------------------------
+  vpn-proxy:
+    image: gogost/gost:latest
+    container_name: vpn-proxy
+    restart: unless-stopped
+    network_mode: service:vpn
+    command: ["-L", "http://:8888"]
+    depends_on:
+      vpn:
+        condition: service_started
 #----------------------------------------------------------------
   vless-proxy:
     image: ghcr.io/sagernet/sing-box:latest
@@ -10,6 +36,9 @@ services:
       - ./sing-box-config.json:/etc/sing-box/config.json
     ports:
       - "1080:1080"
+    depends_on:
+      vpn:
+        condition: service_started
 #----------------------------------------------------------------
   jellyfin:
     image: jellyfin/jellyfin:latest
@@ -79,6 +108,33 @@ services:
       - https_proxy=socks5://vless-proxy:1080
       - DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=1
       - NO_PROXY=localhost,127.0.0.1,identity-service,embedding-service,postgres,ollama,oclip,cache-image-service,catalog-service
+#----------------------------------------------------------------
+  blazor-web:
+    build: ./Services/BlazorServerRenderKinopoisk/BlazorServerRenderKinopoisk
+    container_name: blazor-web
+    restart: unless-stopped
+    ports:
+      - "5044:5044"
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:5044
+      - ApiClient__ApiUrl=http://api-gateway:5000
+    depends_on:
+      api-gateway:
+        condition: service_started
+      identity-service:
+        condition: service_started
+      catalog-service:
+        condition: service_started
+      jellyfin-service:
+        condition: service_started
+      admin-service:
+        condition: service_started
+      embedding-service:
+        condition: service_started
+      cache-image-service:
+        condition: service_started
+      postgres:
+        condition: service_healthy
 #----------------------------------------------------------------
   identity-service:
     build: ./Services/IdentityService/IdentityService
